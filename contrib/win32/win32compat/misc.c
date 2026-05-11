@@ -1910,6 +1910,8 @@ build_commandline_string(const char* cmd, char *const argv[], BOOLEAN prepend_mo
 					cmdline_len++;
 			}
 			cmdline_len += 1 + 2; /*for "around cmd arg and traling space*/
+			if (strlen(p) == 0)
+				cmdline_len += 2; /* empty arg becomes "" */
 		}
 	}
 
@@ -1963,6 +1965,12 @@ build_commandline_string(const char* cmd, char *const argv[], BOOLEAN prepend_mo
 		while (*t1) {
 			*t++ = ' ';
 			char * p1 = *t1++;
+			if (strlen(p1) == 0) {
+				/* empty arg must round-trip as "" */
+				*t++ = '\"';
+				*t++ = '\"';
+				continue;
+			}
 			BOOL add_quotes = FALSE;
 			for (int i = 0; i < (int)strlen(p1); i++) {
 				if (p1[i] == ' ') {
