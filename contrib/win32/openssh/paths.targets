@@ -11,6 +11,23 @@
     <WindowsSDKVersion>10.0.22621.0</WindowsSDKVersion>
     <AdditionalDependentLibs>bcrypt.lib;Userenv.lib;Crypt32.lib;Ws2_32.lib;Secur32.lib;Shlwapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;Netapi32.lib;Rpcrt4.lib;ntdll.lib</AdditionalDependentLibs>
     <MinimalCoreWin>false</MinimalCoreWin>
+    <!-- The Windows SDK props (UAP.props for x86 and x64, UAP.arm.props for ARM and ARM64) set
+         DotNetSdk_LibraryPath_<arch> to "$(DotNetSdkRoot)lib\um\<arch>" when it is empty, and append
+         it to WindowsSDK_LibraryPath_<arch>. Microsoft.Cpp.WindowsSDK.props sets $(DotNetSdkRoot) to
+         $(NETFXKitsDir), read from the registry key of the .NET Framework SDK. Without that SDK, the
+         value is the relative path "lib\um\<arch>". It reaches %LIB% through LibraryPath, and csc.exe
+         reports warning CS1668 when vcpkg.targets compiles its inline task (RoslynCodeTaskFactory) to
+         install the manifest dependencies. Setting these properties to the directory of this file, an
+         absolute path without .lib files, makes the SDK props keep it. Every project imports this file
+         before the SDK props, so $(DotNetSdkRoot) is not known yet here: the value also replaces the
+         .NET Framework SDK directory when that SDK is installed, which no project needs since none of
+         them links one of its libraries. The properties stay in this PropertyGroup, next to
+         WindowsSDKVersion, because OpenSSHBuildHelper.psm1 reads
+         "[XML]$xml.Project.PropertyGroup.WindowsSDKVersion" and assumes a single PropertyGroup. -->
+    <DotNetSdk_LibraryPath_x86>$(MSBuildThisFileDirectory)</DotNetSdk_LibraryPath_x86>
+    <DotNetSdk_LibraryPath_x64>$(MSBuildThisFileDirectory)</DotNetSdk_LibraryPath_x64>
+    <DotNetSdk_LibraryPath_arm>$(MSBuildThisFileDirectory)</DotNetSdk_LibraryPath_arm>
+    <DotNetSdk_LibraryPath_arm64>$(MSBuildThisFileDirectory)</DotNetSdk_LibraryPath_arm64>
   </PropertyGroup>
   <!-- The sources are UTF-8, most of them without BOM. Without /utf-8, cl.exe reads them in the ANSI
        code page of the build machine, which breaks the build on non-1252 machines (code page 932:
