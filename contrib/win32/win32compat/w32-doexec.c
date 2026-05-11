@@ -308,7 +308,7 @@ int do_exec_windows(struct ssh *ssh, Session *s, const char *command, int pty) {
 	/* get shell type */
 	if (strstr(s->pw->pw_shell, "system32\\cmd"))
 		shell_type = SH_CMD;
-	else if (strstr(s->pw->pw_shell, "powershell"))
+	else if (strstr(s->pw->pw_shell, "powershell") || strstr(s->pw->pw_shell, "pwsh"))
 		shell_type = SH_PS;
 	else if (strstr(s->pw->pw_shell, "ssh-shellhost"))
 		shell_type = SH_SHELLHOST;
