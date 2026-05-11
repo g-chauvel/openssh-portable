@@ -9,5 +9,26 @@
     <WindowsSDKVersion>10.0.22621.0</WindowsSDKVersion>
     <AdditionalDependentLibs>bcrypt.lib;Userenv.lib;Crypt32.lib;Ws2_32.lib;Secur32.lib;Shlwapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;Netapi32.lib;Rpcrt4.lib;ntdll.lib</AdditionalDependentLibs>
     <MinimalCoreWin>false</MinimalCoreWin>
+    <!-- The Windows 10 SDK's UAP.props (x86/x64) and UAP.arm.props (ARM/ARM64) build
+         DotNetSdk_LibraryPath_<arch> as "$(DotNetSdkRoot)lib\um\<arch>" and concatenate
+         it into WindowsSDK_LibraryPath_<arch>. Microsoft.Cpp.WindowsSDK.props sets
+         $(DotNetSdkRoot) to $(NETFXKitsDir), which resolves from the registry key for
+         the .NET Framework SDK targeting pack. When that component is not installed,
+         $(DotNetSdkRoot) is empty and the fragment collapses to a bare relative
+         "lib\um\<arch>" that propagates through LibraryPath into %LIB%, tripping
+         csc.exe with warning CS1668 from the RoslynCodeTaskFactory invoked by
+         vcpkg.targets. Pre-define each arch property to $(MSBuildThisFileDirectory) —
+         an absolute reserved MSBuild property — so UAP.props's per-element
+         Condition="'$(DotNetSdk_LibraryPath_<arch>)' == ''" sees a non-empty value
+         and skips the broken concatenation. The injected directory contains no .lib
+         files, so csc.exe just stat()s it and moves on without warning. The per-arch
+         '$(DotNetSdkRoot)' == '' gate keeps real values when the targeting pack is
+         installed. They share this PropertyGroup with WindowsSDKVersion so that
+         OpenSSHBuildHelper.psm1's "[XML]$xml.Project.PropertyGroup.WindowsSDKVersion"
+         lookup (which assumes a single PropertyGroup) keeps working. -->
+    <DotNetSdk_LibraryPath_x86 Condition="'$(DotNetSdkRoot)' == ''">$(MSBuildThisFileDirectory)</DotNetSdk_LibraryPath_x86>
+    <DotNetSdk_LibraryPath_x64 Condition="'$(DotNetSdkRoot)' == ''">$(MSBuildThisFileDirectory)</DotNetSdk_LibraryPath_x64>
+    <DotNetSdk_LibraryPath_arm Condition="'$(DotNetSdkRoot)' == ''">$(MSBuildThisFileDirectory)</DotNetSdk_LibraryPath_arm>
+    <DotNetSdk_LibraryPath_arm64 Condition="'$(DotNetSdkRoot)' == ''">$(MSBuildThisFileDirectory)</DotNetSdk_LibraryPath_arm64>
   </PropertyGroup>
 </Project>
