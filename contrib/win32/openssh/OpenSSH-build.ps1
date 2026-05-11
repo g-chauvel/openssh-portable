@@ -8,7 +8,8 @@ param (
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = "Release",        
     [switch]$NoOpenSSL,
-    [switch]$OneCore
+    [switch]$OneCore,
+    [string]$WindowsSDKVersion
 )
 
 try
@@ -25,8 +26,8 @@ try
         $Bucket = "OpenSSH-Win64"
         $UnitTestFolder = "Unittests-Win64"
     }
-    Write-Verbose "Start-OpenSSHBuild -NativeHostArch $NativeHostArch -Configuration $Configuration -NoOpenSSL:$NoOpenSSL -Onecore:$OneCore -Verbose " -Verbose
-    Start-OpenSSHBuild -NativeHostArch $NativeHostArch -Configuration $Configuration -NoOpenSSL:$NoOpenSSL -Onecore:$OneCore -Verbose
+    Write-Verbose "Start-OpenSSHBuild -NativeHostArch $NativeHostArch -Configuration $Configuration -NoOpenSSL:$NoOpenSSL -Onecore:$OneCore -WindowsSDKVersion '$WindowsSDKVersion' -Verbose " -Verbose
+    Start-OpenSSHBuild -NativeHostArch $NativeHostArch -Configuration $Configuration -NoOpenSSL:$NoOpenSSL -Onecore:$OneCore -WindowsSDKVersion $WindowsSDKVersion -Verbose
     Write-Verbose "Start-OpenSSHPackage -NativeHostArch $NativeHostArch -Configuration $Configuration -NoOpenSSL:$NoOpenSSL -Onecore:$OneCore -DestinationPath $repolocation\$($Bucket)_symbols" -verbose
     Start-OpenSSHPackage -NativeHostArch $NativeHostArch -Configuration $Configuration -NoOpenSSL:$NoOpenSSL -Onecore:$OneCore -DestinationPath "$repolocation\$($Bucket)_symbols"
     Copy-OpenSSHUnitTests -NativeHostArch $NativeHostArch -Configuration $Configuration -DestinationPath "$repolocation\UnitTests"

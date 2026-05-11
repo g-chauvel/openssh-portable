@@ -480,7 +480,13 @@ function Start-OpenSSHBuild
 
         [switch]$NoOpenSSL,
 
-        [switch]$OneCore
+        [switch]$OneCore,
+
+        # Override the Windows 10 SDK version stamped into paths.targets.
+        # By default the latest installed SDK is picked, which may not be
+        # the one the project is tested against. Set this when multiple
+        # SDKs are installed and the default pick breaks the build.
+        [string]$WindowsSDKVersion
     )
     $script:BuildLogFile = $null
 
@@ -517,8 +523,21 @@ function Start-OpenSSHBuild
         (Get-Content $f).Replace('#define OPENSSL_HAS_NISTP521 1','') | Set-Content $f
     }
     
-    $win10SDKVer = Get-Windows10SDKVersion -NativeHostArch $NativeHostArch
     [XML]$xml = Get-Content $PathTargets
+    if ($WindowsSDKVersion) {
+        $win10SDKVer = $WindowsSDKVersion
+    } else {
+        # Honor the version already pinned in paths.targets if it is
+        # installed; this lets the project assert which SDK it is tested
+        # against. Otherwise fall back to the latest installed SDK.
+        $pinned = $xml.Project.PropertyGroup.WindowsSDKVersion
+        $sdkLib = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\Lib\$pinned"
+        if ($pinned -and (Test-Path $sdkLib)) {
+            $win10SDKVer = $pinned
+        } else {
+            $win10SDKVer = Get-Windows10SDKVersion -NativeHostArch $NativeHostArch
+        }
+    }
     $xml.Project.PropertyGroup.WindowsSDKVersion = $win10SDKVer.ToString()
 
     if($NativeHostArch.ToLower().Startswith('arm'))
@@ -541,7 +560,9 @@ function Start-OpenSSHBuild
 
     if($OneCore)
     {
-        $win10SDKVer = Get-Windows10SDKVersion -NativeHostArch $NativeHostArch
+        if (-not $WindowsSDKVersion) {
+            $win10SDKVer = Get-Windows10SDKVersion -NativeHostArch $NativeHostArch
+        }
         [XML]$xml = Get-Content $PathTargets
         $xml.Project.PropertyGroup.WindowsSDKVersion = $win10SDKVer
         $xml.Project.PropertyGroup.AdditionalDependentLibs = 'onecore.lib;shlwapi.lib'

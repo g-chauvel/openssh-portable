@@ -202,7 +202,7 @@
       </PreBuildEvent>
     </ItemDefinitionGroup>
     <PreBuildEvent>
-      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(VC_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
+      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(UniversalCRT_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Generate crtheaders.h and config.h</Message>
@@ -238,7 +238,7 @@ copy /Y "$(SolutionDir)openssh-events.man" "$(OutDir)"</Command>
       <AdditionalLibraryDirectories>$(OpenSSH-Lib-Path)$(Platform)\$(Configuration);$(SolutionDir)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
-      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(VC_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
+      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(UniversalCRT_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Generate crtheaders.h and config.h</Message>
@@ -274,7 +274,7 @@ copy /Y "$(SolutionDir)openssh-events.man" "$(OutDir)"</Command>
       <AdditionalLibraryDirectories>$(OpenSSH-Lib-Path)$(Platform)\$(Configuration);$(SolutionDir)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
-      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(VC_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
+      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(UniversalCRT_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Generate crtheaders.h and config.h</Message>
@@ -310,7 +310,7 @@ copy /Y "$(SolutionDir)openssh-events.man" "$(OutDir)"</Command>
       <AdditionalLibraryDirectories>$(OpenSSH-Lib-Path)$(Platform)\$(Configuration);$(SolutionDir)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
-      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(VC_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
+      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(UniversalCRT_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Generate crtheaders.h and config.h</Message>
@@ -350,7 +350,7 @@ copy /Y "$(SolutionDir)openssh-events.man" "$(OutDir)"</Command>
       <AdditionalLibraryDirectories>$(OpenSSH-Lib-Path)$(Platform)\$(Configuration);$(SolutionDir)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
-      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(VC_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
+      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(UniversalCRT_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Generate crtheaders.h and config.h</Message>
@@ -390,7 +390,7 @@ copy /Y "$(SolutionDir)openssh-events.man" "$(OutDir)"</Command>
       <AdditionalLibraryDirectories>$(OpenSSH-Lib-Path)$(Platform)\$(Configuration);$(SolutionDir)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
-      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(VC_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
+      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(UniversalCRT_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Generate crtheaders.h and config.h</Message>
@@ -430,7 +430,7 @@ copy /Y "$(SolutionDir)openssh-events.man" "$(OutDir)"</Command>
       <AdditionalLibraryDirectories>$(OpenSSH-Lib-Path)$(Platform)\$(Configuration);$(SolutionDir)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
-      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(VC_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
+      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(UniversalCRT_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Generate crtheaders.h and config.h</Message>
@@ -470,7 +470,7 @@ copy /Y "$(SolutionDir)openssh-events.man" "$(OutDir)"</Command>
       <AdditionalLibraryDirectories>$(OpenSSH-Lib-Path)$(Platform)\$(Configuration);$(SolutionDir)\vcpkg_installed\$(VcpkgTriplet)\$(VcpkgTriplet)\bin;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
     <PreBuildEvent>
-      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(VC_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
+      <Command>powershell.exe -Executionpolicy Bypass -File "$(SolutionDir)config.ps1" -Config_h_vs "$(SolutionDir)config.h.vs" -Config_h "$(OpenSSH-Src-Path)config.h" -VCIncludePath "$(UniversalCRT_IncludePath)" -OutCRTHeader "$(OpenSSH-Src-Path)contrib\win32\win32compat\inc\crtheaders.h"</Command>
     </PreBuildEvent>
     <PreBuildEvent>
       <Message>Generate crtheaders.h and config.h</Message>
