@@ -1876,6 +1876,13 @@ build_commandline_string(const char* cmd, char *const argv[], BOOLEAN prepend_mo
 		t1 = argv;
 		while (*t1) {
 			char *p = *t1++;
+			BOOL add_quotes = FALSE;
+			for (int i = 0; i < (int)strlen(p); i++) {
+				if (p[i] == ' ') {
+					add_quotes = TRUE;
+					break;
+				}
+			}
 			for (int i = 0; i < (int)strlen(p); i++) {
 				if (p[i] == '\\') {
 					char * b = p + i;
@@ -1888,7 +1895,7 @@ build_commandline_string(const char* cmd, char *const argv[], BOOLEAN prepend_mo
 					while (b != NULL && *b == '\\') {
 						backslash_count++;
 						b++;
-						if (b != NULL &&  *b == '\"') {
+						if (b != NULL && (*b == '\"' || (*b == '\0' && add_quotes))) {
 							additional_backslash = 1;
 							break;
 						}
@@ -1974,12 +1981,14 @@ build_commandline_string(const char* cmd, char *const argv[], BOOLEAN prepend_mo
 					int backslash_count = 0;
 					/*
 					* Backslashes are interpreted literally, unless they immediately
-					* precede a double quotation mark.
+					* precede a double quotation mark. Trailing backslashes inside
+					* an auto-quoted argument count as preceding a quote, because
+					* the closing quote we add below would otherwise consume one.
 					*/
 					while (b != NULL && *b == '\\') {
 						backslash_count++;
 						b++;
-						if (b != NULL && *b == '\"') {
+						if (b != NULL && (*b == '\"' || (*b == '\0' && add_quotes))) {
 							additional_backslash = 1;
 							break;
 						}
