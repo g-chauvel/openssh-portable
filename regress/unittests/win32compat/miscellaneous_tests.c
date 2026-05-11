@@ -418,6 +418,24 @@ test_build_commandline_string()
 	ASSERT_STRING_EQ(out, buf);
 	free(out);
 	TEST_DONE();
+
+	TEST_START("trailing backslash in auto-quoted arg");
+	argv[2] = "arg1 arg2"; /* arg1 arg2\ */
+	out = build_commandline_string(argv[0], argv + 1, TRUE);
+	sprintf_s(buf, PATH_MAX, "\"%s\" %s %s", argv[0], argv[1], "\"arg1 arg2\"");
+	ASSERT_STRING_EQ(out, buf);
+	free(out);
+	argv[2] = "arg1 arg2\\"; /* arg1 arg2\ */
+	out = build_commandline_string(argv[0], argv + 1, TRUE);
+	sprintf_s(buf, PATH_MAX, "\"%s\" %s %s", argv[0], argv[1], "\"arg1 arg2\\\\\"");
+	ASSERT_STRING_EQ(out, buf);
+	free(out);
+	argv[2] = "arg1 arg2\\\\"; /* arg1 arg2\\ */
+	out = build_commandline_string(argv[0], argv + 1, TRUE);
+	sprintf_s(buf, PATH_MAX, "\"%s\" %s %s", argv[0], argv[1], "\"arg1 arg2\\\\\\\\\"");
+	ASSERT_STRING_EQ(out, buf);
+	free(out);
+	TEST_DONE();
 }
 
 void
