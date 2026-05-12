@@ -454,6 +454,15 @@ test_build_commandline_string()
 	ASSERT_STRING_EQ(out, "\"shell.exe\" \"arg\twith\ttab\"");
 	free(out);
 	TEST_DONE();
+
+	TEST_START("T5: argument that is a lone double quote");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "\"";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \\\"");
+	free(out);
+	TEST_DONE();
 }
 
 void
