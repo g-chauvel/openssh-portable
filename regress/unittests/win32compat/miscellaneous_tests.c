@@ -481,6 +481,15 @@ test_build_commandline_string()
 	ASSERT_STRING_EQ(out, "\"shell.exe\" say\\\"hi");
 	free(out);
 	TEST_DONE();
+
+	TEST_START("T8: N backslashes before embedded quote emit 2N+1");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "a\\\\\"b";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" a\\\\\\\\\\\"b");
+	free(out);
+	TEST_DONE();
 }
 
 void
