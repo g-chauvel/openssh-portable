@@ -67,6 +67,16 @@
   <ItemGroup>
     <ClInclude Include="$(OpenSSH-Src-Path)regress\unittests\win32compat\tests.h" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- Helper used by test_build_commandline_string round-trip tests.
+         ReferenceOutputAssembly=false: we don't link against it, we just
+         need MSBuild to build it before us so the .exe exists at test time. -->
+    <ProjectReference Include="echo-argv.vcxproj">
+      <Project>{B3E5F1AA-8C7E-4D2A-9C7F-1A2B3C4D5E6F}</Project>
+      <ReferenceOutputAssembly>false</ReferenceOutputAssembly>
+      <LinkLibraryDependencies>false</LinkLibraryDependencies>
+    </ProjectReference>
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{BF295BA9-4BF8-43F8-8CBF-FAE84815466C}</ProjectGuid>
     <Keyword>Win32Proj</Keyword>
