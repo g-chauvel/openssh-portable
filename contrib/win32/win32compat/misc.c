@@ -1893,6 +1893,10 @@ build_commandline_string(const char* cmd, char *const argv[], BOOLEAN prepend_mo
 							break;
 						}
 					}
+					/* Reserve worst case for trailing backslashes in an
+					 * arg that may end up auto-quoted. */
+					if (b != NULL && *b == '\0')
+						additional_backslash = 1;
 					cmdline_len += backslash_count * (additional_backslash + 1);
 					i += backslash_count - 1;
 				}
@@ -1984,6 +1988,10 @@ build_commandline_string(const char* cmd, char *const argv[], BOOLEAN prepend_mo
 							break;
 						}
 					}
+					/* Trailing backslashes inside an auto-quoted arg also
+					 * precede a (closing) quote we will emit, so double them. */
+					if (add_quotes && b != NULL && *b == '\0')
+						additional_backslash = 1;
 					i += backslash_count - 1;
 					int escaped_backslash_count = backslash_count * (additional_backslash + 1);
 					while (escaped_backslash_count--)
