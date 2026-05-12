@@ -473,12 +473,12 @@ test_build_commandline_string()
 	free(out);
 	TEST_DONE();
 
-	TEST_START("T7: argument containing only a quote needs auto-quoting");
+	TEST_START("T7: embedded double quote (no space) escaped as \\\"");
 	argv[0] = "\"shell.exe\"";
 	argv[1] = "say\"hi";
 	argv[2] = NULL;
 	out = build_commandline_string(argv[0], argv + 1, FALSE);
-	ASSERT_STRING_EQ(out, "\"shell.exe\" \"say\\\"hi\"");
+	ASSERT_STRING_EQ(out, "\"shell.exe\" say\\\"hi");
 	free(out);
 	TEST_DONE();
 }
