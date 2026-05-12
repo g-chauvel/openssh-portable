@@ -418,6 +418,15 @@ test_build_commandline_string()
 	ASSERT_STRING_EQ(out, buf);
 	free(out);
 	TEST_DONE();
+
+	TEST_START("T1: empty argv entry");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "";
+	argv[2] = "after";
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"\" after");
+	free(out);
+	TEST_DONE();
 }
 
 void
