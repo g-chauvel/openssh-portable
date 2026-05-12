@@ -1957,14 +1957,12 @@ build_commandline_string(const char* cmd, char *const argv[], BOOLEAN prepend_mo
 			*t++ = ' ';
 			char * p1 = *t1++;
 			BOOL add_quotes = FALSE;
-			/* leave as is if the command is surrounded by single quotes*/
-			if (p1[0] != '\'')
-				for (int i = 0; i < (int)strlen(p1); i++) {
-					if (p1[i] == ' ') {
-						add_quotes = TRUE;
-						break;
-					}
+			for (int i = 0; i < (int)strlen(p1); i++) {
+				if (p1[i] == ' ') {
+					add_quotes = TRUE;
+					break;
 				}
+			}
 			if (p1[0] == '\0')
 				add_quotes = TRUE;
 			if (add_quotes)
