@@ -8,6 +8,9 @@
  *
  * The test thus validates the full encoder + MSVCRT-decoder round trip,
  * the way posix_spawn / CreateProcess would behave at runtime.
+ *
+ * Test code: deliberately uses generously-sized static buffers instead
+ * of dynamic allocation to keep the code straightforward.
  */
 #include "includes.h"
 #include <windows.h>
@@ -16,13 +19,21 @@
 #include "../test_helper/test_helper.h"
 #include "argv_roundtrip.h"
 
-/* Locate echo-argv.exe living next to the parent dir of unittest-win32compat.exe.
- * The unittest binary lives in bin\<plat>\<conf>\unittest-win32compat\
- * and the helper lives in bin\<plat>\<conf>\echo-argv.exe (one level up). */
+#define ROUNDTRIP_MAX_ARGV   64
+#define ROUNDTRIP_BUF_SIZE   (64 * 1024)
+#define ROUNDTRIP_WCMD_SIZE  8192
+
+/* Static state, shared across one call to assert_argv_roundtrip(). */
+static char roundtrip_output[ROUNDTRIP_BUF_SIZE];
+static char roundtrip_store[ROUNDTRIP_BUF_SIZE];
+static char *roundtrip_argv[ROUNDTRIP_MAX_ARGV];
+static wchar_t roundtrip_wcmdline[ROUNDTRIP_WCMD_SIZE];
+static char roundtrip_helper[MAX_PATH];
+
+/* Locate echo-argv.exe next to the parent dir of unittest-win32compat.exe. */
 static char *
 find_echo_argv(void)
 {
-	static char path[MAX_PATH];
 	char self[MAX_PATH];
 	DWORD n = GetModuleFileNameA(NULL, self, MAX_PATH);
 	if (n == 0 || n >= MAX_PATH)
@@ -33,45 +44,38 @@ find_echo_argv(void)
 	p = strrchr(self, '\\');
 	if (!p) return NULL;
 	*p = '\0';
-	snprintf(path, sizeof(path), "%s\\echo-argv.exe", self);
-	return path;
+	snprintf(roundtrip_helper, sizeof(roundtrip_helper), "%s\\echo-argv.exe", self);
+	return roundtrip_helper;
 }
 
-/* Read everything from a HANDLE pipe until EOF. */
+/* Read everything from a HANDLE pipe until EOF into the static buffer.
+ * Returns pointer to roundtrip_output (NUL-terminated), or NULL on overflow. */
 static char *
 slurp_pipe(HANDLE h, size_t *out_len)
 {
-	size_t cap = 4096, len = 0;
-	char *buf = malloc(cap);
-	if (!buf) return NULL;
+	size_t len = 0;
 	for (;;) {
-		if (len + 1024 > cap) {
-			cap *= 2;
-			char *nb = realloc(buf, cap);
-			if (!nb) { free(buf); return NULL; }
-			buf = nb;
-		}
+		if (len + 1 >= sizeof(roundtrip_output))
+			return NULL;
 		DWORD got = 0;
-		BOOL ok = ReadFile(h, buf + len, (DWORD)(cap - len - 1), &got, NULL);
+		BOOL ok = ReadFile(h, roundtrip_output + len,
+			(DWORD)(sizeof(roundtrip_output) - len - 1), &got, NULL);
 		if (!ok || got == 0) break;
 		len += got;
 	}
-	buf[len] = '\0';
+	roundtrip_output[len] = '\0';
 	if (out_len) *out_len = len;
-	return buf;
+	return roundtrip_output;
 }
 
 /* Parse echo-argv stdout: each line is "ARG[i]=<...>\r?\n".
- * For each "ARG[" occurrence, take everything between the first '<' after
- * the '=' and the last '>' on that "line" (until the next "ARG[" or EOF,
- * after trimming trailing CR/LF). */
+ * Fills roundtrip_argv[] with pointers into roundtrip_store[]. */
 static char **
 parse_echo_argv_output(const char *buf, int *out_argc)
 {
 	*out_argc = 0;
-	int cap = 16, n = 0;
-	char **argv = malloc(cap * sizeof(char *));
-	if (!argv) return NULL;
+	int n = 0;
+	size_t store_used = 0;
 	const char *p = buf;
 	while ((p = strstr(p, "ARG[")) != NULL) {
 		const char *open = strchr(p, '<');
@@ -84,29 +88,17 @@ parse_echo_argv_output(const char *buf, int *out_argc)
 		if (*close != '>') break;
 		const char *content = open + 1;
 		size_t len = close - content;
-		char *s = malloc(len + 1);
-		if (!s) break;
+		if (n >= ROUNDTRIP_MAX_ARGV) break;
+		if (store_used + len + 1 > sizeof(roundtrip_store)) break;
+		char *s = roundtrip_store + store_used;
 		memcpy(s, content, len);
 		s[len] = '\0';
-		if (n >= cap) {
-			cap *= 2;
-			char **na = realloc(argv, cap * sizeof(char *));
-			if (!na) { free(s); break; }
-			argv = na;
-		}
-		argv[n++] = s;
+		store_used += len + 1;
+		roundtrip_argv[n++] = s;
 		p = next ? next : end;
 	}
 	*out_argc = n;
-	return argv;
-}
-
-static void
-free_parsed_argv(char **argv, int argc)
-{
-	if (!argv) return;
-	for (int i = 0; i < argc; i++) free(argv[i]);
-	free(argv);
+	return roundtrip_argv;
 }
 
 /* Run echo-argv with build_commandline_string(echo-argv, argv) and
@@ -124,13 +116,13 @@ run_echo_argv(char *const argv[], int *out_argc)
 	if (!cmdline) return NULL;
 
 	int wlen = MultiByteToWideChar(CP_UTF8, 0, cmdline, -1, NULL, 0);
-	wchar_t *wcmdline = malloc(wlen * sizeof(wchar_t));
-	if (!wcmdline) { free(cmdline); return NULL; }
-	MultiByteToWideChar(CP_UTF8, 0, cmdline, -1, wcmdline, wlen);
+	if (wlen <= 0 || (size_t)wlen > ROUNDTRIP_WCMD_SIZE) { free(cmdline); return NULL; }
+	MultiByteToWideChar(CP_UTF8, 0, cmdline, -1, roundtrip_wcmdline, wlen);
+	free(cmdline);
 
 	HANDLE rd = NULL, wr = NULL;
 	SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
-	if (!CreatePipe(&rd, &wr, &sa, 0)) { free(wcmdline); free(cmdline); return NULL; }
+	if (!CreatePipe(&rd, &wr, &sa, 0)) return NULL;
 	SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
 
 	STARTUPINFOW si;
@@ -143,8 +135,8 @@ run_echo_argv(char *const argv[], int *out_argc)
 	PROCESS_INFORMATION pi;
 	memset(&pi, 0, sizeof(pi));
 
-	if (!CreateProcessW(NULL, wcmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
-		CloseHandle(rd); CloseHandle(wr); free(wcmdline); free(cmdline);
+	if (!CreateProcessW(NULL, roundtrip_wcmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
+		CloseHandle(rd); CloseHandle(wr);
 		return NULL;
 	}
 	CloseHandle(wr);
@@ -154,12 +146,8 @@ run_echo_argv(char *const argv[], int *out_argc)
 	CloseHandle(rd);
 	CloseHandle(pi.hProcess);
 	CloseHandle(pi.hThread);
-	free(wcmdline);
-	free(cmdline);
 	if (!output) return NULL;
-	char **received = parse_echo_argv_output(output, out_argc);
-	free(output);
-	return received;
+	return parse_echo_argv_output(output, out_argc);
 }
 
 /* Assert that running echo-argv with argv[] yields the same argv[] back.
@@ -177,5 +165,4 @@ assert_argv_roundtrip(char *const argv[])
 	ASSERT_INT_EQ(recv_argc, exp_argc + 1);
 	for (int i = 0; i < exp_argc; i++)
 		ASSERT_STRING_EQ(recv[i + 1], argv[i]);
-	free_parsed_argv(recv, recv_argc);
 }
