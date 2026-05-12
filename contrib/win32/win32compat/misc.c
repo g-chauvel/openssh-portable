@@ -1965,6 +1965,8 @@ build_commandline_string(const char* cmd, char *const argv[], BOOLEAN prepend_mo
 						break;
 					}
 				}
+			if (p1[0] == '\0')
+				add_quotes = TRUE;
 			if (add_quotes)
 				*t++ = '\"';
 			for (int i = 0; i < (int)strlen(p1); i++) {
