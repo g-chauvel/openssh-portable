@@ -423,6 +423,7 @@ test_build_commandline_string()
 void
 miscellaneous_tests()
 {
+	test_build_commandline_string();
 	//test_ioctl();
 	test_path_conversion_utilities();
 	test_sanitizedpath();
@@ -431,5 +432,4 @@ miscellaneous_tests()
 	test_statvfs();
 	test_chroot();
 	test_build_exec_command();
-	test_build_commandline_string();
 }
