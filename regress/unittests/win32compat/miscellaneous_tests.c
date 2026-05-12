@@ -436,6 +436,15 @@ test_build_commandline_string()
 	ASSERT_STRING_EQ(out, "\"shell.exe\" \"'arg with space'\"");
 	free(out);
 	TEST_DONE();
+
+	TEST_START("T3: trailing backslash inside auto-quoted argument");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "C:\\Program Files\\";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"C:\\Program Files\\\\\"");
+	free(out);
+	TEST_DONE();
 }
 
 void
