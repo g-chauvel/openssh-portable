@@ -445,6 +445,15 @@ test_build_commandline_string()
 	ASSERT_STRING_EQ(out, "\"shell.exe\" \"C:\\Program Files\\\\\"");
 	free(out);
 	TEST_DONE();
+
+	TEST_START("T4: argument containing tab must be auto-quoted");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "arg\twith\ttab";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"arg\twith\ttab\"");
+	free(out);
+	TEST_DONE();
 }
 
 void
