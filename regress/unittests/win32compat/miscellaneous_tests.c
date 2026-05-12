@@ -463,6 +463,15 @@ test_build_commandline_string()
 	ASSERT_STRING_EQ(out, "\"shell.exe\" \\\"");
 	free(out);
 	TEST_DONE();
+
+	TEST_START("T6: mid-arg backslash run before ordinary char is not doubled");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "with space and a\\\\b";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"with space and a\\\\b\"");
+	free(out);
+	TEST_DONE();
 }
 
 void
