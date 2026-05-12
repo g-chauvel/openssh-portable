@@ -427,6 +427,15 @@ test_build_commandline_string()
 	ASSERT_STRING_EQ(out, "\"shell.exe\" \"\" after");
 	free(out);
 	TEST_DONE();
+
+	TEST_START("T2: leading single-quote must not skip auto-quoting");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "'arg with space'";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"'arg with space'\"");
+	free(out);
+	TEST_DONE();
 }
 
 void
