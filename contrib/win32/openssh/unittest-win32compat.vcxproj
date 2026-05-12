@@ -57,6 +57,9 @@
     <ClCompile Include="$(OpenSSH-Src-Path)regress\unittests\win32compat\miscellaneous_tests.c">
       <ExcludedFromBuild Condition="$(UseOpenSSL)=='false'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="$(OpenSSH-Src-Path)regress\unittests\win32compat\argv_roundtrip.c">
+      <ExcludedFromBuild Condition="$(UseOpenSSL)=='false'">true</ExcludedFromBuild>
+    </ClCompile>
     <ClCompile Include="$(OpenSSH-Src-Path)regress\unittests\win32compat\string_tests.c">
       <ExcludedFromBuild Condition="$(UseOpenSSL)=='false'">true</ExcludedFromBuild>
     </ClCompile>

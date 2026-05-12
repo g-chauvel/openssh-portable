@@ -7,6 +7,7 @@
 
 #include "../test_helper/test_helper.h"
 #include "tests.h"
+#include "argv_roundtrip.h"
 
 int retValue;
 
@@ -498,6 +499,13 @@ test_build_commandline_string()
 	out = build_commandline_string(argv[0], argv + 1, FALSE);
 	ASSERT_STRING_EQ(out, "\"shell.exe\" \"line1\nline2\"");
 	free(out);
+	TEST_DONE();
+
+	/* ------- Round-trip tests via echo-argv helper ------- */
+
+	TEST_START("R1: round-trip plain args");
+	char *rt1[] = { "foo", "bar", "baz", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt1);
 	TEST_DONE();
 }
 
