@@ -110,7 +110,11 @@ free_parsed_argv(char **argv, int argc)
 }
 
 /* Run echo-argv with build_commandline_string(echo-argv, argv) and
- * return what the child saw. *out_argc includes argv[0] (helper path). */
+ * return what the child saw. *out_argc includes argv[0] (helper path).
+ *
+ * Mirrors what posix_spawn does in w32fd.c: convert the UTF-8 cmdline to
+ * UTF-16 and call CreateProcessW directly. CreateProcessA would route
+ * through the ANSI code page and silently lose non-ASCII bytes. */
 static char **
 run_echo_argv(char *const argv[], int *out_argc)
 {
@@ -119,12 +123,17 @@ run_echo_argv(char *const argv[], int *out_argc)
 	char *cmdline = build_commandline_string(helper, argv, FALSE);
 	if (!cmdline) return NULL;
 
+	int wlen = MultiByteToWideChar(CP_UTF8, 0, cmdline, -1, NULL, 0);
+	wchar_t *wcmdline = malloc(wlen * sizeof(wchar_t));
+	if (!wcmdline) { free(cmdline); return NULL; }
+	MultiByteToWideChar(CP_UTF8, 0, cmdline, -1, wcmdline, wlen);
+
 	HANDLE rd = NULL, wr = NULL;
 	SECURITY_ATTRIBUTES sa = { sizeof(sa), NULL, TRUE };
-	if (!CreatePipe(&rd, &wr, &sa, 0)) { free(cmdline); return NULL; }
+	if (!CreatePipe(&rd, &wr, &sa, 0)) { free(wcmdline); free(cmdline); return NULL; }
 	SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
 
-	STARTUPINFOA si;
+	STARTUPINFOW si;
 	memset(&si, 0, sizeof(si));
 	si.cb = sizeof(si);
 	si.dwFlags = STARTF_USESTDHANDLES;
@@ -134,8 +143,8 @@ run_echo_argv(char *const argv[], int *out_argc)
 	PROCESS_INFORMATION pi;
 	memset(&pi, 0, sizeof(pi));
 
-	if (!CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
-		CloseHandle(rd); CloseHandle(wr); free(cmdline);
+	if (!CreateProcessW(NULL, wcmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
+		CloseHandle(rd); CloseHandle(wr); free(wcmdline); free(cmdline);
 		return NULL;
 	}
 	CloseHandle(wr);
@@ -145,6 +154,7 @@ run_echo_argv(char *const argv[], int *out_argc)
 	CloseHandle(rd);
 	CloseHandle(pi.hProcess);
 	CloseHandle(pi.hThread);
+	free(wcmdline);
 	free(cmdline);
 	if (!output) return NULL;
 	char **received = parse_echo_argv_output(output, out_argc);
