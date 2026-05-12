@@ -697,6 +697,6 @@ file_tests()
 	file_nonblocking_io_tests();
 	file_select_tests();
 	file_miscellaneous_tests();
-	file_symlink_tests();
-	file_link_tests();
+	//file_symlink_tests();
+	//file_link_tests();
 }

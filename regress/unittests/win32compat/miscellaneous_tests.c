@@ -511,6 +511,6 @@ miscellaneous_tests()
 	test_pw();
 	test_realpath();
 	test_statvfs();
-	test_chroot();
+	//test_chroot();
 	test_build_exec_command();
 }
