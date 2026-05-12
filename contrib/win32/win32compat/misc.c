@@ -1962,7 +1962,7 @@ build_commandline_string(const char* cmd, char *const argv[], BOOLEAN prepend_mo
 			char * p1 = *t1++;
 			BOOL add_quotes = FALSE;
 			for (int i = 0; i < (int)strlen(p1); i++) {
-				if (p1[i] == ' ') {
+				if (p1[i] == ' ' || p1[i] == '\t') {
 					add_quotes = TRUE;
 					break;
 				}
