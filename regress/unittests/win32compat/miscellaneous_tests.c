@@ -7,6 +7,7 @@
 
 #include "../test_helper/test_helper.h"
 #include "tests.h"
+#include "argv_roundtrip.h"
 
 int retValue;
 
@@ -373,7 +374,7 @@ test_build_commandline_string()
 	free(out);
 	out = build_commandline_string("cmd.exe /c ping.exe", NULL, FALSE);
 	ASSERT_STRING_EQ(out, "\"cmd.exe\" /c ping.exe");
-	sprintf_s(in, PATH_MAX, "\"%s\\%s\"", __progdir, "ssh-shellhost.exe\" -c \"arg1 arg2\"");
+	sprintf_s(in, PATH_MAX, "\"%s\\%s", __progdir, "ssh-shellhost.exe\" -c \"arg1 arg2\"");
 	out = build_commandline_string(in, NULL, TRUE);
 	ASSERT_STRING_EQ(out, in);
 	out = build_commandline_string("\"ssh-shellhost.exe\" -c \"arg1 arg2\"", NULL, TRUE);
@@ -414,9 +415,154 @@ test_build_commandline_string()
 	argv[0] = "\"c:\\cygwin64\\bin\\ba.exe\"";
 	argv[2] = "'arg1 \\arg2\\\"'";
 	out = build_commandline_string(argv[0], argv + 1, TRUE);
-	sprintf_s(buf, PATH_MAX, "%s %s %s", argv[0], argv[1], "'arg1 \\arg2\\\\\\\"'");
+	sprintf_s(buf, PATH_MAX, "%s %s %s", argv[0], argv[1], "\"'arg1 \\arg2\\\\\\\"'\"");
 	ASSERT_STRING_EQ(out, buf);
 	free(out);
+	TEST_DONE();
+
+	TEST_START("empty argv entry");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "";
+	argv[2] = "after";
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"\" after");
+	free(out);
+	TEST_DONE();
+
+	TEST_START("trailing backslash inside auto-quoted argument");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "C:\\Program Files\\";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"C:\\Program Files\\\\\"");
+	free(out);
+	TEST_DONE();
+
+	TEST_START("argument containing tab");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "arg\twith\ttab";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"arg\twith\ttab\"");
+	free(out);
+	TEST_DONE();
+
+	TEST_START("N backslashes before embedded quote emit 2N+1");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "a\\\\\"b";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" a\\\\\\\\\\\"b");
+	free(out);
+	TEST_DONE();
+
+	/* The UCRT only splits at space and tab, but the Cygwin and MSYS2
+	 * runtime of bash.exe also splits at LF and CR */
+	TEST_START("argument containing newline");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "line1\nline2";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"line1\nline2\"");
+	free(out);
+	TEST_DONE();
+
+	TEST_START("argument containing carriage return");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "line1\rline2";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"line1\rline2\"");
+	free(out);
+	TEST_DONE();
+}
+
+/*
+ * Same cases as test_build_commandline_string(), in the same order. Each
+ * test runs the produced cmdline through the echo-argv helper and checks
+ * the argv the child receives. When the input is an argv, the expected
+ * value is the input array itself, so the test source needs no
+ * hand-written escaping. The command lines of "arg is null" name echo-argv
+ * instead of cmd.exe or ssh-shellhost.exe, and the child must receive the
+ * arguments they contain. "cmd is null" builds no command line and keeps
+ * its NULL check.
+ */
+void
+test_build_commandline_string_roundtrip()
+{
+	char in[PATH_MAX];
+
+	TEST_START("cmd is null");
+	ASSERT_PTR_EQ(build_commandline_string(NULL, NULL, TRUE), NULL);
+	TEST_DONE();
+
+	TEST_START("arg is null");
+	char *rt_slash_c_arg[] = { "/c", "arg", NULL };
+	sprintf_s(in, PATH_MAX, "\"%s\\%s", __progdir, "echo-argv.exe\" /c arg");
+	ASSERT_CMDLINE_ROUNDTRIP(in, FALSE, rt_slash_c_arg);
+	char *rt_slash_c_ping[] = { "/c", "ping.exe", NULL };
+	ASSERT_CMDLINE_ROUNDTRIP("echo-argv.exe /c ping.exe", FALSE, rt_slash_c_ping);
+	char *rt_dash_c_arg1_arg2[] = { "-c", "arg1 arg2", NULL };
+	sprintf_s(in, PATH_MAX, "\"%s\\%s", __progdir, "echo-argv.exe\" -c \"arg1 arg2\"");
+	ASSERT_CMDLINE_ROUNDTRIP(in, TRUE, rt_dash_c_arg1_arg2);
+	ASSERT_CMDLINE_ROUNDTRIP("\"echo-argv.exe\" -c \"arg1 arg2\"", TRUE, rt_dash_c_arg1_arg2);
+	char *rt_slash_c_arg1_arg2[] = { "/c", "arg1 arg2", NULL };
+	ASSERT_CMDLINE_ROUNDTRIP("\"echo-argv.exe\" /c \"arg1 arg2\"", FALSE, rt_slash_c_arg1_arg2);
+	TEST_DONE();
+
+	TEST_START("-c \"arg1 arg2\"");
+	char *rt_space[] = { "-c", "arg1 arg2", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_space);
+	TEST_DONE();
+
+	TEST_START("-c \"arg1\\arg2\" (quoted, no space)");
+	char *rt_quoted[] = { "-c", "\"arg1\\arg2\"", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_quoted);
+	TEST_DONE();
+
+	TEST_START("-c \"arg1 arg2\\\" (space + trailing bs in quoted)");
+	char *rt_quoted_space[] = { "-c", "\"arg1 arg2\\\"", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_quoted_space);
+	TEST_DONE();
+
+	TEST_START("-c arg1\\arg2 (plain backslashes, no quote)");
+	char *rt_backslash[] = { "-c", "arg1\\arg2", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_backslash);
+	TEST_DONE();
+
+	TEST_START("-c 'arg1 \\arg2\\\"' (single quotes + space)");
+	char *rt_single_quotes[] = { "-c", "'arg1 \\arg2\\\"'", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_single_quotes);
+	TEST_DONE();
+
+	TEST_START("empty argv entry");
+	char *rt_empty[] = { "", "after", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_empty);
+	TEST_DONE();
+
+	TEST_START("trailing backslash with space");
+	char *rt_trailing_backslash[] = { "C:\\Program Files\\", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_trailing_backslash);
+	TEST_DONE();
+
+	TEST_START("argument containing tab");
+	char *rt_tab[] = { "arg\twith\ttab", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_tab);
+	TEST_DONE();
+
+	TEST_START("N backslashes before embedded quote");
+	char *rt_backslashes_quote[] = { "a\\\\\"b", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_backslashes_quote);
+	TEST_DONE();
+
+	TEST_START("argument containing newline");
+	char *rt_lf[] = { "line1\nline2", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_lf);
+	TEST_DONE();
+
+	TEST_START("argument containing carriage return");
+	char *rt_cr[] = { "line1\rline2", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_cr);
 	TEST_DONE();
 }
 
@@ -432,4 +578,5 @@ miscellaneous_tests()
 	test_chroot();
 	test_build_exec_command();
 	test_build_commandline_string();
+	test_build_commandline_string_roundtrip();
 }
