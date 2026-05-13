@@ -7,6 +7,7 @@
 
 #include "../test_helper/test_helper.h"
 #include "tests.h"
+#include "argv_roundtrip.h"
 
 int retValue;
 
@@ -418,6 +419,172 @@ test_build_commandline_string()
 	ASSERT_STRING_EQ(out, buf);
 	free(out);
 	TEST_DONE();
+
+	TEST_START("T1: empty argv entry");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "";
+	argv[2] = "after";
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"\" after");
+	free(out);
+	TEST_DONE();
+
+	TEST_START("T2: leading single-quote must not skip auto-quoting");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "'arg with space'";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"'arg with space'\"");
+	free(out);
+	TEST_DONE();
+
+	TEST_START("T3: trailing backslash inside auto-quoted argument");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "C:\\Program Files\\";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"C:\\Program Files\\\\\"");
+	free(out);
+	TEST_DONE();
+
+	TEST_START("T4: argument containing tab must be auto-quoted");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "arg\twith\ttab";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"arg\twith\ttab\"");
+	free(out);
+	TEST_DONE();
+
+	TEST_START("T5: argument that is a lone double quote");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "\"";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \\\"");
+	free(out);
+	TEST_DONE();
+
+	TEST_START("T6: mid-arg backslash run before ordinary char is not doubled");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "with space and a\\\\b";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"with space and a\\\\b\"");
+	free(out);
+	TEST_DONE();
+
+	TEST_START("T7: embedded double quote (no space) escaped as \\\"");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "say\"hi";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" say\\\"hi");
+	free(out);
+	TEST_DONE();
+
+	TEST_START("T8: N backslashes before embedded quote emit 2N+1");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "a\\\\\"b";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" a\\\\\\\\\\\"b");
+	free(out);
+	TEST_DONE();
+
+	TEST_START("T9: argument containing newline must be auto-quoted");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "line1\nline2";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"line1\nline2\"");
+	free(out);
+	TEST_DONE();
+}
+
+/*
+ * Mirror of test_build_commandline_string() but each test runs the produced
+ * cmdline through the echo-argv helper and asserts that the argv the child
+ * receives matches the input argv exactly. The "expected" value is just the
+ * input array — no error-prone string escaping in the test source.
+ */
+void
+test_build_commandline_string_roundtrip()
+{
+	TEST_START("RT: no args (just program)");
+	char *rt_empty[] = { NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_empty);
+	TEST_DONE();
+
+	TEST_START("RT-legacy/arg1: -c \"arg1 arg2\"");
+	char *rt_l1[] = { "-c", "arg1 arg2", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_l1);
+	TEST_DONE();
+
+	TEST_START("RT-legacy/arg2: -c \"arg1\\arg2\" (quoted, no space)");
+	char *rt_l2[] = { "-c", "\"arg1\\arg2\"", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_l2);
+	TEST_DONE();
+
+	TEST_START("RT-legacy/arg3: -c \"arg1 arg2\\\" (space + trailing bs in quoted)");
+	char *rt_l3[] = { "-c", "\"arg1 arg2\\\"", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_l3);
+	TEST_DONE();
+
+	TEST_START("RT-legacy/arg4: -c arg1\\arg2 (plain backslashes, no quote)");
+	char *rt_l4[] = { "-c", "arg1\\arg2", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_l4);
+	TEST_DONE();
+
+	TEST_START("RT-legacy/arg5: -c 'arg1 \\arg2\\\"' (single quotes + space)");
+	char *rt_l5[] = { "-c", "'arg1 \\arg2\\\"'", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_l5);
+	TEST_DONE();
+
+	TEST_START("RT-T1: empty argv entry");
+	char *rt_t1[] = { "", "after", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_t1);
+	TEST_DONE();
+
+	TEST_START("RT-T2: leading single-quote with space");
+	char *rt_t2[] = { "'arg with space'", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_t2);
+	TEST_DONE();
+
+	TEST_START("RT-T3: trailing backslash with space");
+	char *rt_t3[] = { "C:\\Program Files\\", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_t3);
+	TEST_DONE();
+
+	TEST_START("RT-T4: argument containing tab");
+	char *rt_t4[] = { "arg\twith\ttab", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_t4);
+	TEST_DONE();
+
+	TEST_START("RT-T5: argument that is a lone double quote");
+	char *rt_t5[] = { "\"", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_t5);
+	TEST_DONE();
+
+	TEST_START("RT-T6: mid-arg backslash run before ordinary char");
+	char *rt_t6[] = { "with space and a\\\\b", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_t6);
+	TEST_DONE();
+
+	TEST_START("RT-T7: embedded double quote without space");
+	char *rt_t7[] = { "say\"hi", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_t7);
+	TEST_DONE();
+
+	TEST_START("RT-T8: N backslashes before embedded quote");
+	char *rt_t8[] = { "a\\\\\"b", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_t8);
+	TEST_DONE();
+
+	TEST_START("RT-T9: argument containing newline");
+	char *rt_t9[] = { "line1\nline2", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_t9);
+	TEST_DONE();
 }
 
 void
@@ -432,4 +599,5 @@ miscellaneous_tests()
 	test_chroot();
 	test_build_exec_command();
 	test_build_commandline_string();
+	test_build_commandline_string_roundtrip();
 }
