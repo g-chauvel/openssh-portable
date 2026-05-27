@@ -262,8 +262,11 @@ cleanup:
 int do_exec_windows(struct ssh *ssh, Session *s, const char *command, int pty) {
 	int pipein[2], pipeout[2], pipeerr[2], ret = -1;
 	char *exec_command = NULL, *posix_cmd_input = NULL, *shell = NULL, *pty_cmd_cp = NULL;;
+	char **spawn_argv = NULL;
 	HANDLE job = NULL, process_handle;
 	extern char* shell_command_option;
+	extern char** shell_command_option_argv;
+	extern int shell_command_option_argc;
 	extern char* shell_arguments;
 	extern BOOLEAN arg_escape;
 
@@ -377,17 +380,32 @@ int do_exec_windows(struct ssh *ssh, Session *s, const char *command, int pty) {
 	}
 	else {
 		posix_spawn_file_actions_t actions;
-		char *spawn_argv[4] = { NULL, };
 		exec_command = build_exec_command(command);
 		debug3("exec_command: %s", exec_command);
 
+		/* room for the shell, the shell option tokens, the command and NULL */
+		if ((spawn_argv = calloc(shell_command_option_argc + 4, sizeof(char *))) == NULL) {
+			errno = ENOMEM;
+			goto cleanup;
+		}
+
 		if (shell_type == SH_PS || shell_type == SH_BASH ||
 			shell_type == SH_CYGWIN || (shell_type == SH_OTHER) && arg_escape) {
-			spawn_argv[0] = shell;
+			int n = 0;
+			spawn_argv[n++] = shell;
 
 			if (exec_command) {
-				spawn_argv[1] = shell_command_option_local;
-				spawn_argv[2] = exec_command;
+				/*
+				 * posix_spawn quotes each argument on its own, so pass a
+				 * DefaultShellCommandOption made of several tokens, such as
+				 * "-NoLogo -NoProfile -Command", token by token
+				 */
+				if (shell_command_option_argv)
+					for (int i = 0; i < shell_command_option_argc; i++)
+						spawn_argv[n++] = shell_command_option_argv[i];
+				else
+					spawn_argv[n++] = shell_command_option_local;
+				spawn_argv[n++] = exec_command;
 			}
 		}
 		else {
@@ -506,6 +524,8 @@ cleanup:
 		CloseHandle(job);
 	if (pty_cmd_cp)
 		free(pty_cmd_cp);
+	if (spawn_argv)
+		free(spawn_argv);
 
 	return ret;
 }

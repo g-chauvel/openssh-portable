@@ -50,8 +50,103 @@
 static struct passwd pw;
 static char* pw_shellpath = NULL;
 char* shell_command_option = NULL;
+char** shell_command_option_argv = NULL;   /* tokenized DefaultShellCommandOption, NULL-terminated */
+int shell_command_option_argc = 0;          /* number of tokens (excludes terminating NULL) */
 char* shell_arguments = NULL;
 BOOLEAN arg_escape = TRUE;
+
+/*
+ * Split a DefaultShellCommandOption value (UTF-8) into a NULL-terminated argv[],
+ * with the rules of the C runtime for the arguments that follow argv[0]
+ * (https://learn.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments):
+ * spaces and tabs separate the arguments, double quotes delimit a quoted part,
+ * two double quotes inside a quoted part give a literal double quote,
+ * 2N backslashes followed by a double quote give N backslashes and a delimiter,
+ * 2N+1 backslashes followed by a double quote give N backslashes and a literal
+ * double quote, and the other backslashes are literal. These characters are
+ * ASCII, so they never occur inside a UTF-8 multibyte sequence.
+ * Sets *out_argc to the number of tokens. Returns NULL with *out_argc = 0 for a
+ * NULL or empty value and on allocation failure. Free the result with
+ * free_tokenized_default_shell_command_option().
+ */
+char**
+tokenize_default_shell_command_option(const char* value, int* out_argc)
+{
+	char **argv = NULL, *token = NULL;
+	const char *p = value;
+	int argc = 0;
+
+	if (out_argc == NULL)
+		return NULL;
+	*out_argc = 0;
+	if (value == NULL || value[0] == '\0')
+		return NULL;
+
+	/* k tokens take at least 2k - 1 characters, plus a slot for the NULL terminator */
+	if ((argv = calloc(strlen(value) / 2 + 2, sizeof(char *))) == NULL ||
+	    (token = malloc(strlen(value) + 1)) == NULL)
+		goto fail;
+
+	for (;;) {
+		size_t len = 0;
+		int quoted = 0;
+
+		while (*p == ' ' || *p == '\t')
+			p++;
+		if (*p == '\0')
+			break;
+
+		for (;;) {
+			size_t backslashes = 0;
+
+			while (*p == '\\') {
+				backslashes++;
+				p++;
+			}
+			if (*p == '"') {
+				for (size_t i = 0; i < backslashes / 2; i++)
+					token[len++] = '\\';
+				if (backslashes % 2 == 1)
+					token[len++] = '"';	/* escaped double quote */
+				else if (quoted && p[1] == '"') {
+					token[len++] = '"';	/* two double quotes inside a quoted part */
+					p++;
+				} else
+					quoted = !quoted;
+				p++;
+				continue;
+			}
+			for (; backslashes > 0; backslashes--)
+				token[len++] = '\\';
+			if (*p == '\0' || (!quoted && (*p == ' ' || *p == '\t')))
+				break;
+			token[len++] = *p++;
+		}
+		token[len] = '\0';
+		if ((argv[argc] = _strdup(token)) == NULL)
+			goto fail;
+		argc++;
+	}
+
+	free(token);
+	*out_argc = argc;
+	return argv;
+fail:
+	free(token);
+	free_tokenized_default_shell_command_option(argv);
+	return NULL;
+}
+
+/* Free a NULL-terminated argv returned by tokenize_default_shell_command_option. */
+void
+free_tokenized_default_shell_command_option(char** argv)
+{
+	if (argv == NULL)
+		return;
+	for (int i = 0; argv[i] != NULL; i++)
+		free(argv[i]);
+	free(argv);
+}
 
 /* returns 0 on success, and -1 with errno set on failure */
 static int
@@ -62,6 +157,8 @@ set_defaultshell()
 	REGSAM mask = STANDARD_RIGHTS_READ | KEY_QUERY_VALUE | KEY_WOW64_64KEY;
 	wchar_t path_buf[PATH_MAX], option_buf[PATH_MAX], arg_buf[PATH_MAX];
 	char *pw_shellpath_local = NULL, *command_option_local = NULL, *shell_arguments_local = NULL;
+	char **command_option_argv_local = NULL;
+	int command_option_argc_local = 0;
 
 	errno = 0;
 
@@ -110,13 +207,25 @@ set_defaultshell()
 		if ((shell_arguments_local = utf16_to_utf8(arg_buf)) == NULL)
 			goto cleanup;
 
+	/* Tokenize the option string for callers that need to forward each switch
+	 * as a separate argv entry (e.g. "-NoLogo -NoProfile -Command" must reach
+	 * PowerShell as three arguments, not a single quoted blob). */
+	if (command_option_local) {
+		command_option_argv_local = tokenize_default_shell_command_option(command_option_local, &command_option_argc_local);
+		if (command_option_argv_local == NULL)
+			goto cleanup;
+	}
+
 	convertToBackslash(pw_shellpath_local);
 	to_lower_case(pw_shellpath_local);
 	pw_shellpath = pw_shellpath_local;
 	pw_shellpath_local = NULL;
 	shell_command_option = command_option_local;
+	shell_command_option_argv = command_option_argv_local;
+	shell_command_option_argc = command_option_argc_local;
 	shell_arguments = shell_arguments_local;
 	command_option_local = NULL;
+	command_option_argv_local = NULL;
 	shell_arguments_local = NULL;
 
 	ret = 0;
@@ -126,6 +235,9 @@ cleanup:
 
 	if (command_option_local)
 		free(command_option_local);
+
+	if (command_option_argv_local)
+		free_tokenized_default_shell_command_option(command_option_argv_local);
 
 	if (shell_arguments_local)
 		free(shell_arguments_local);

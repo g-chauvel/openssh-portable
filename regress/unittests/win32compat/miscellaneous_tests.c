@@ -358,6 +358,151 @@ test_build_exec_command()
 	TEST_DONE();
 }
 
+/*
+ * Tests for tokenize_default_shell_command_option (pwd.c).
+ *
+ * The function splits the DefaultShellCommandOption value (UTF-8) with the
+ * rules of the C runtime for the arguments that follow argv[0]. The expected
+ * values were checked against the UCRT. Each test checks argc and the argv
+ * contents.
+ */
+void
+test_tokenize_default_shell_command_option()
+{
+	char **argv;
+	int argc;
+
+	TEST_START("null input");
+	argv = tokenize_default_shell_command_option(NULL, &argc);
+	ASSERT_PTR_EQ(argv, NULL);
+	ASSERT_INT_EQ(argc, 0);
+	TEST_DONE();
+
+	TEST_START("empty input");
+	argv = tokenize_default_shell_command_option("", &argc);
+	ASSERT_PTR_EQ(argv, NULL);
+	ASSERT_INT_EQ(argc, 0);
+	TEST_DONE();
+
+	TEST_START("whitespace only input gives no token");
+	argv = tokenize_default_shell_command_option(" \t ", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 0);
+	ASSERT_PTR_EQ(argv[0], NULL);
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("single token");
+	argv = tokenize_default_shell_command_option("-Command", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 1);
+	ASSERT_STRING_EQ(argv[0], "-Command");
+	ASSERT_PTR_EQ(argv[1], NULL);
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("multi token (the main use case)");
+	argv = tokenize_default_shell_command_option("-NoLogo -NoProfile -Command", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 3);
+	ASSERT_STRING_EQ(argv[0], "-NoLogo");
+	ASSERT_STRING_EQ(argv[1], "-NoProfile");
+	ASSERT_STRING_EQ(argv[2], "-Command");
+	ASSERT_PTR_EQ(argv[3], NULL);
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("quoted path with space");
+	argv = tokenize_default_shell_command_option("-WorkingDirectory \"C:\\a b\" -Command", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 3);
+	ASSERT_STRING_EQ(argv[0], "-WorkingDirectory");
+	ASSERT_STRING_EQ(argv[1], "C:\\a b");
+	ASSERT_STRING_EQ(argv[2], "-Command");
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("doubled backslash before the closing quote");
+	/* "C:\a b\\" -> C:\a b\ */
+	argv = tokenize_default_shell_command_option("-WorkingDirectory \"C:\\a b\\\\\" -Command", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 3);
+	ASSERT_STRING_EQ(argv[0], "-WorkingDirectory");
+	ASSERT_STRING_EQ(argv[1], "C:\\a b\\");
+	ASSERT_STRING_EQ(argv[2], "-Command");
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("backslash-quote escape produces literal quote");
+	argv = tokenize_default_shell_command_option("-X \"a\\\"b\"", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 2);
+	ASSERT_STRING_EQ(argv[0], "-X");
+	ASSERT_STRING_EQ(argv[1], "a\"b");
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("first token follows the rules of the other tokens");
+	/* "a\"b" rest: \" is a literal quote here as well. CommandLineToArgvW
+	 * would read the first token with the argv[0] rules, where backslashes
+	 * are always literal. */
+	argv = tokenize_default_shell_command_option("\"a\\\"b\" rest", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 2);
+	ASSERT_STRING_EQ(argv[0], "a\"b");
+	ASSERT_STRING_EQ(argv[1], "rest");
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("two double quotes inside a quoted part");
+	/* a"b"" c d -> ab" c d: the quoted part goes on after "" */
+	argv = tokenize_default_shell_command_option("a\"b\"\" c d", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 1);
+	ASSERT_STRING_EQ(argv[0], "ab\" c d");
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("empty quoted token");
+	argv = tokenize_default_shell_command_option("-A \"\" -B", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 3);
+	ASSERT_STRING_EQ(argv[0], "-A");
+	ASSERT_STRING_EQ(argv[1], "");
+	ASSERT_STRING_EQ(argv[2], "-B");
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("unterminated quote runs to the end");
+	argv = tokenize_default_shell_command_option("-X \"a b", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 2);
+	ASSERT_STRING_EQ(argv[0], "-X");
+	ASSERT_STRING_EQ(argv[1], "a b");
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("multiple spaces between tokens are collapsed");
+	argv = tokenize_default_shell_command_option("-A    -B\t-C", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 3);
+	ASSERT_STRING_EQ(argv[0], "-A");
+	ASSERT_STRING_EQ(argv[1], "-B");
+	ASSERT_STRING_EQ(argv[2], "-C");
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("UTF-8 multibyte characters are kept");
+	/* -Command, then e acute and a grave in UTF-8 between double quotes */
+	argv = tokenize_default_shell_command_option("-Command \"\xc3\xa9\xc3\xa0\"", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 2);
+	ASSERT_STRING_EQ(argv[0], "-Command");
+	ASSERT_STRING_EQ(argv[1], "\xc3\xa9\xc3\xa0");
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+}
+
 void
 test_build_commandline_string()
 {
@@ -592,6 +737,7 @@ miscellaneous_tests()
 	test_statvfs();
 	test_chroot();
 	test_build_exec_command();
+	test_tokenize_default_shell_command_option();
 	test_build_commandline_string();
 	test_build_commandline_string_roundtrip();
 }
