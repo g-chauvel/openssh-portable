@@ -78,6 +78,8 @@ int is_conpty_supported();
 int exec_command_with_pty(int * pid, char* cmd, int in, int out, int err, unsigned int col, unsigned int row, int ttyfd);
 char * build_exec_command(const char * command);
 char * build_commandline_string(const char* cmd, char *const argv[], BOOLEAN prepend_module_path);
+char** tokenize_default_shell_command_option(const wchar_t* value, int* out_argc);
+void free_tokenized_default_shell_command_option(char** argv);
 char* get_custom_lsa_package();
 wchar_t* get_final_path_by_handle(HANDLE h);
 int lookup_principal_name(const wchar_t * sam_account_name, wchar_t * user_principal_name);

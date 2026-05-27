@@ -38,6 +38,7 @@
 #include <LM.h>
 #include <sddl.h>
 #include <DsGetDC.h>
+#include <shellapi.h>
 #define SECURITY_WIN32
 #include <security.h>
 
@@ -50,8 +51,78 @@
 static struct passwd pw;
 static char* pw_shellpath = NULL;
 char* shell_command_option = NULL;
+char** shell_command_option_argv = NULL;   /* tokenized DefaultShellCommandOption, NULL-terminated */
+int shell_command_option_argc = 0;          /* number of tokens (excludes terminating NULL) */
 char* shell_arguments = NULL;
 BOOLEAN arg_escape = TRUE;
+
+/*
+ * Tokenize a registry-value command-line string into UTF-8 argv[].
+ * Uses CommandLineToArgvW with a dummy program name prefix to dodge its
+ * special argv[0] parsing rule (which does NOT honor backslash-quote escapes
+ * — see https://learn.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments).
+ * Returns NULL-terminated argv[] (caller-allocated; must be freed via
+ * free_tokenized_default_shell_command_option()), sets *out_argc to the
+ * number of tokens (excluding the NULL terminator).
+ * Returns NULL on failure (or empty input) with *out_argc = 0.
+ */
+char**
+tokenize_default_shell_command_option(const wchar_t* value, int* out_argc)
+{
+	if (out_argc == NULL)
+		return NULL;
+	*out_argc = 0;
+	if (value == NULL || value[0] == L'\0')
+		return NULL;
+
+	/* Prepend dummy program name so CommandLineToArgvW applies standard parsing
+	 * to every real token (the special argv[0] rule consumes "x" instead). */
+	size_t value_len = wcslen(value);
+	wchar_t* prefixed = malloc((value_len + 3) * sizeof(wchar_t));   /* "x " + value + L'\0' */
+	if (prefixed == NULL)
+		return NULL;
+	prefixed[0] = L'x';
+	prefixed[1] = L' ';
+	memcpy(prefixed + 2, value, (value_len + 1) * sizeof(wchar_t));
+
+	int wargc = 0;
+	LPWSTR* wargv = CommandLineToArgvW(prefixed, &wargc);
+	free(prefixed);
+	if (wargv == NULL || wargc < 1)
+		return NULL;
+
+	/* Skip the dummy at wargv[0]; convert wargv[1..wargc-1] to UTF-8. */
+	int real_argc = wargc - 1;
+	char** argv = calloc(real_argc + 1, sizeof(char*));   /* +1 for NULL terminator */
+	if (argv == NULL) {
+		LocalFree(wargv);
+		return NULL;
+	}
+	for (int i = 0; i < real_argc; i++) {
+		argv[i] = utf16_to_utf8(wargv[i + 1]);
+		if (argv[i] == NULL) {
+			for (int j = 0; j < i; j++)
+				free(argv[j]);
+			free(argv);
+			LocalFree(wargv);
+			return NULL;
+		}
+	}
+	LocalFree(wargv);
+	*out_argc = real_argc;
+	return argv;
+}
+
+/* Free a NULL-terminated argv returned by tokenize_default_shell_command_option. */
+void
+free_tokenized_default_shell_command_option(char** argv)
+{
+	if (argv == NULL)
+		return;
+	for (int i = 0; argv[i] != NULL; i++)
+		free(argv[i]);
+	free(argv);
+}
 
 /* returns 0 on success, and -1 with errno set on failure */
 static int
@@ -62,6 +133,8 @@ set_defaultshell()
 	REGSAM mask = STANDARD_RIGHTS_READ | KEY_QUERY_VALUE | KEY_WOW64_64KEY;
 	wchar_t path_buf[PATH_MAX], option_buf[PATH_MAX], arg_buf[PATH_MAX];
 	char *pw_shellpath_local = NULL, *command_option_local = NULL, *shell_arguments_local = NULL;
+	char **command_option_argv_local = NULL;
+	int command_option_argc_local = 0;
 
 	errno = 0;
 
@@ -110,13 +183,25 @@ set_defaultshell()
 		if ((shell_arguments_local = utf16_to_utf8(arg_buf)) == NULL)
 			goto cleanup;
 
+	/* Tokenize the option string for callers that need to forward each switch
+	 * as a separate argv entry (e.g. "-NoLogo -NoProfile -Command" must reach
+	 * PowerShell as three arguments, not a single quoted blob). */
+	if (option_buf[0] != L'\0') {
+		command_option_argv_local = tokenize_default_shell_command_option(option_buf, &command_option_argc_local);
+		if (command_option_argv_local == NULL)
+			goto cleanup;
+	}
+
 	convertToBackslash(pw_shellpath_local);
 	to_lower_case(pw_shellpath_local);
 	pw_shellpath = pw_shellpath_local;
 	pw_shellpath_local = NULL;
 	shell_command_option = command_option_local;
+	shell_command_option_argv = command_option_argv_local;
+	shell_command_option_argc = command_option_argc_local;
 	shell_arguments = shell_arguments_local;
 	command_option_local = NULL;
+	command_option_argv_local = NULL;
 	shell_arguments_local = NULL;
 
 	ret = 0;
@@ -126,6 +211,9 @@ cleanup:
 
 	if (command_option_local)
 		free(command_option_local);
+
+	if (command_option_argv_local)
+		free_tokenized_default_shell_command_option(command_option_argv_local);
 
 	if (shell_arguments_local)
 		free(shell_arguments_local);

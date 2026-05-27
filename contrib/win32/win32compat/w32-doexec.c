@@ -248,8 +248,11 @@ cleanup:
 int do_exec_windows(struct ssh *ssh, Session *s, const char *command, int pty) {
 	int pipein[2], pipeout[2], pipeerr[2], ret = -1;
 	char *exec_command = NULL, *posix_cmd_input = NULL, *shell = NULL, *pty_cmd_cp = NULL;;
+	char **spawn_argv = NULL;
 	HANDLE job = NULL, process_handle;
 	extern char* shell_command_option;
+	extern char** shell_command_option_argv;   /* tokens of shell_command_option, NULL-terminated, or NULL */
+	extern int shell_command_option_argc;
 	extern char* shell_arguments;
 	extern BOOLEAN arg_escape;
 
@@ -324,19 +327,35 @@ int do_exec_windows(struct ssh *ssh, Session *s, const char *command, int pty) {
 	else
 		shell_command_option_local = "-c";
 	debug3("shell_option: %s", shell_command_option_local);
+
+	/* When the registry value contained multiple tokens (e.g.
+	 * "-NoLogo -NoProfile -Command"), shell_command_option_argv holds them
+	 * pre-split so we can forward each one as its own argv entry. Fall back
+	 * to a singleton list around the legacy single-string value otherwise. */
+	char* opt_singleton[2] = { shell_command_option_local, NULL };
+	char** opt_argv = (shell_command_option_argv != NULL) ? shell_command_option_argv : opt_singleton;
+	int opt_argc = (shell_command_option_argv != NULL) ? shell_command_option_argc : 1;
+
 	send_shell_telemetry(pty, shell_type);
 
 	if (pty) {
 		fcntl(s->ptyfd, F_SETFD, FD_CLOEXEC);
 		char *pty_cmd = NULL;
 		if (command) {
-			size_t len = strlen(shell) + 1 + strlen(shell_command_option_local) + 1 + strlen(command) + 1;
+			/* Concatenate shell + every option token + command, separated by spaces.
+			 * The PTY path passes its cmdline verbatim through ConPTY to the child,
+			 * whose MSVCRT re-parses it — so emitting "<opt0> <opt1> ... <command>"
+			 * unquoted gives the same argv the user would get on a command prompt. */
+			size_t len = strlen(shell) + 1 + strlen(command) + 1;
+			for (int i = 0; i < opt_argc; i++)
+				len += strlen(opt_argv[i]) + 1;
 			pty_cmd_cp = pty_cmd = calloc(1, len);
-			if (pty_cmd != NULL)
-			{
+			if (pty_cmd != NULL) {
 				strcpy_s(pty_cmd, len, shell);
-				strcat_s(pty_cmd, len, " ");
-				strcat_s(pty_cmd, len, shell_command_option_local);
+				for (int i = 0; i < opt_argc; i++) {
+					strcat_s(pty_cmd, len, " ");
+					strcat_s(pty_cmd, len, opt_argv[i]);
+				}
 				strcat_s(pty_cmd, len, " ");
 				strcat_s(pty_cmd, len, command);
 			}
@@ -363,31 +382,42 @@ int do_exec_windows(struct ssh *ssh, Session *s, const char *command, int pty) {
 	}
 	else {
 		posix_spawn_file_actions_t actions;
-		char *spawn_argv[4] = { NULL, };
 		exec_command = build_exec_command(command);
 		debug3("exec_command: %s", exec_command);
 
+		/* Build a NULL-terminated argv. Worst case: shell + opt_argc tokens + exec_command + NULL. */
+		spawn_argv = calloc(opt_argc + 3, sizeof(char *));
+		if (spawn_argv == NULL) {
+			errno = ENOMEM;
+			goto cleanup;
+		}
+
 		if (shell_type == SH_PS || shell_type == SH_BASH ||
 			shell_type == SH_CYGWIN || (shell_type == SH_OTHER) && arg_escape) {
+			/* Escaped path: pass each token as a distinct argv entry so
+			 * build_commandline_string() (called by posix_spawn) re-quotes each
+			 * one according to MSVCRT rules. */
 			spawn_argv[0] = shell;
-
+			int n = 1;
 			if (exec_command) {
-				spawn_argv[1] = shell_command_option_local;
-				spawn_argv[2] = exec_command;
+				for (int i = 0; i < opt_argc; i++)
+					spawn_argv[n++] = opt_argv[i];
+				spawn_argv[n++] = exec_command;
 			}
 		}
 		else {
 			/*
 			 * no escaping needed for cmd and ssh-shellhost, or escaping is disabled
-			 * in registry; pass shell, shell option, and quoted command as cmd path
-			 * of posix_spawn to avoid escaping
+			 * in registry; pack shell + option tokens into spawn_argv[0] (the
+			 * posix_spawn cmd-path, which build_commandline_string does NOT
+			 * re-quote), and wrap exec_command in literal double quotes for
+			 * cmd.exe-style "strip outer quotes" semantics.
 			 */
 			size_t posix_cmd_input_len = strlen(shell) + 1;
-
-			/* account for " around and null */
 			if (exec_command) {
-				posix_cmd_input_len += strlen(shell_command_option_local) + 1;
-				posix_cmd_input_len += strlen(exec_command) + 2 + 1;
+				for (int i = 0; i < opt_argc; i++)
+					posix_cmd_input_len += strlen(opt_argv[i]) + 1;
+				posix_cmd_input_len += strlen(exec_command) + 2 + 1;   /* "" around + space */
 			}
 
 			if ((posix_cmd_input = malloc(posix_cmd_input_len)) == NULL) {
@@ -395,12 +425,15 @@ int do_exec_windows(struct ssh *ssh, Session *s, const char *command, int pty) {
 				goto cleanup;
 			}
 
+			strcpy_s(posix_cmd_input, posix_cmd_input_len, shell);
 			if (exec_command) {
-				sprintf_s(posix_cmd_input, posix_cmd_input_len, "%s %s \"%s\"",
-					shell, shell_command_option_local, exec_command);
-			} else {
-				sprintf_s(posix_cmd_input, posix_cmd_input_len, "%s",
-					shell); 
+				for (int i = 0; i < opt_argc; i++) {
+					strcat_s(posix_cmd_input, posix_cmd_input_len, " ");
+					strcat_s(posix_cmd_input, posix_cmd_input_len, opt_argv[i]);
+				}
+				strcat_s(posix_cmd_input, posix_cmd_input_len, " \"");
+				strcat_s(posix_cmd_input, posix_cmd_input_len, exec_command);
+				strcat_s(posix_cmd_input, posix_cmd_input_len, "\"");
 			}
 
 			spawn_argv[0] = posix_cmd_input;
@@ -498,6 +531,8 @@ cleanup:
 		CloseHandle(job);
 	if (pty_cmd_cp)
 		free(pty_cmd_cp);
+	if (spawn_argv)
+		free(spawn_argv);   /* contents (shell/opt_argv/exec_command) freed elsewhere or static */
 
 	return ret;
 }
