@@ -415,7 +415,7 @@ test_build_commandline_string()
 	argv[0] = "\"c:\\cygwin64\\bin\\ba.exe\"";
 	argv[2] = "'arg1 \\arg2\\\"'";
 	out = build_commandline_string(argv[0], argv + 1, TRUE);
-	sprintf_s(buf, PATH_MAX, "%s %s %s", argv[0], argv[1], "'arg1 \\arg2\\\\\\\"'");
+	sprintf_s(buf, PATH_MAX, "%s %s %s", argv[0], argv[1], "\"'arg1 \\arg2\\\\\\\"'\"");
 	ASSERT_STRING_EQ(out, buf);
 	free(out);
 	TEST_DONE();
