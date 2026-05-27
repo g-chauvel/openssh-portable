@@ -358,6 +358,110 @@ test_build_exec_command()
 	TEST_DONE();
 }
 
+/*
+ * Tests for tokenize_default_shell_command_option (pwd.c).
+ *
+ * The function tokenizes the DefaultShellCommandOption registry value into a
+ * UTF-8 argv[] via CommandLineToArgvW, prepending a dummy program name to
+ * dodge the documented argv[0] parsing quirk. Each test checks both argc and
+ * argv contents, plus the NULL terminator.
+ */
+void
+test_tokenize_default_shell_command_option()
+{
+	char **argv;
+	int argc;
+
+	TEST_START("null input");
+	argv = tokenize_default_shell_command_option(NULL, &argc);
+	ASSERT_PTR_EQ(argv, NULL);
+	ASSERT_INT_EQ(argc, 0);
+	TEST_DONE();
+
+	TEST_START("empty input");
+	argv = tokenize_default_shell_command_option(L"", &argc);
+	ASSERT_PTR_EQ(argv, NULL);
+	ASSERT_INT_EQ(argc, 0);
+	TEST_DONE();
+
+	TEST_START("single token");
+	argv = tokenize_default_shell_command_option(L"-Command", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 1);
+	ASSERT_STRING_EQ(argv[0], "-Command");
+	ASSERT_PTR_EQ(argv[1], NULL);
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("multi token (the main use case)");
+	argv = tokenize_default_shell_command_option(L"-NoLogo -NoProfile -Command", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 3);
+	ASSERT_STRING_EQ(argv[0], "-NoLogo");
+	ASSERT_STRING_EQ(argv[1], "-NoProfile");
+	ASSERT_STRING_EQ(argv[2], "-Command");
+	ASSERT_PTR_EQ(argv[3], NULL);
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("quoted path with space");
+	argv = tokenize_default_shell_command_option(L"-WorkingDirectory \"C:\\a b\" -Command", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 3);
+	ASSERT_STRING_EQ(argv[0], "-WorkingDirectory");
+	ASSERT_STRING_EQ(argv[1], "C:\\a b");
+	ASSERT_STRING_EQ(argv[2], "-Command");
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("backslash-quote escape produces literal quote");
+	/* MSVCRT/CommandLineToArgvW: \" inside argv[i>=1] = literal " */
+	argv = tokenize_default_shell_command_option(L"-X \"a\\\"b\"", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 2);
+	ASSERT_STRING_EQ(argv[0], "-X");
+	ASSERT_STRING_EQ(argv[1], "a\"b");
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("argv[0] quirk dodged via dummy prefix");
+	/* The string seen by CommandLineToArgvW is literally:  "a\"b" rest
+	 * - Under the argv[0] rule: \ is always literal and the first " ends the
+	 *   quoted region, so the token would be split into "a\" + "b" rest"
+	 *   (incorrect — the embedded " gets misinterpreted).
+	 * - Under the argv[i>=1] rule: \" is an escape producing a literal ",
+	 *   the quoted region stays open until the next unescaped ", yielding
+	 *   the single token a"b followed by rest.
+	 * The dummy "x " prefix ensures we apply the argv[i>=1] rule. */
+	argv = tokenize_default_shell_command_option(L"\"a\\\"b\" rest", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 2);
+	ASSERT_STRING_EQ(argv[0], "a\"b");
+	ASSERT_STRING_EQ(argv[1], "rest");
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("multiple spaces between tokens are collapsed");
+	argv = tokenize_default_shell_command_option(L"-A    -B\t-C", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 3);
+	ASSERT_STRING_EQ(argv[0], "-A");
+	ASSERT_STRING_EQ(argv[1], "-B");
+	ASSERT_STRING_EQ(argv[2], "-C");
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+
+	TEST_START("Unicode tokens (UTF-8 round-trip)");
+	/* "-Command \"éà\"" -> tokens: "-Command", "éà" (UTF-8: \xc3\xa9\xc3\xa0) */
+	argv = tokenize_default_shell_command_option(L"-Command \"éà\"", &argc);
+	ASSERT_PTR_NE(argv, NULL);
+	ASSERT_INT_EQ(argc, 2);
+	ASSERT_STRING_EQ(argv[0], "-Command");
+	ASSERT_STRING_EQ(argv[1], "\xc3\xa9\xc3\xa0");
+	free_tokenized_default_shell_command_option(argv);
+	TEST_DONE();
+}
+
 void
 test_build_commandline_string()
 {
@@ -598,6 +702,7 @@ miscellaneous_tests()
 	test_statvfs();
 	test_chroot();
 	test_build_exec_command();
+	test_tokenize_default_shell_command_option();
 	test_build_commandline_string();
 	test_build_commandline_string_roundtrip();
 }
