@@ -1107,7 +1107,7 @@ fileio_close(struct w32_io* pio)
 	* CancelIo lets the in-flight WriteFileEx report ERROR_OPERATION_ABORTED
 	* via its completion APC and unblocks close.
 	*/
-	int drain_retries = 100;  /* ~100 ms cap */
+	int drain_retries = 5000;  /* ~5 s cap (p5: bumped from 100ms; cold-pwsh on ARM64 VMSS needs longer to drain stdin) */
 	while (drain_retries-- > 0 && pio->write_details.pending)
 		SleepEx(1, TRUE);
 
