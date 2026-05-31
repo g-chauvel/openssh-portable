@@ -1097,20 +1097,30 @@ fileio_close(struct w32_io* pio)
 	* copied to internal buffer. The app may subsequently try to close the
 	* fd thinking everything is written. IF the Windows handle is closed
 	* now, the pipe/file io write operation may terminate prematurely.
-	* To compensate for the discrepency
-	* wait here until async write has completed.
-	* If you see any process waiting here indefinitely - its because no one
-	* is draining from other end of the pipe/file. This is an unfortunate
-	* consequence that should otherwise have very little impact on practical
-	* scenarios.
+	* To compensate for the discrepency we wait here until the async write
+	* has completed, BUT WITH A BOUNDED CAP. The original code waited
+	* INFINITE, which freezes the caller (and on sshd-session this freezes
+	* the SSH main loop, breaking keepalive/dispatch and ultimately
+	* triggering the peer's TCP stack to abort the connection - observed
+	* on cold-start pwsh under fleeting-plugin-azure VMSS where the child
+	* takes ~1.3 s to drain the kernel pipe buffer). After the cap,
+	* CancelIo lets the in-flight WriteFileEx report ERROR_OPERATION_ABORTED
+	* via its completion APC and unblocks close.
 	*/
-	while (pio->write_details.pending)
-		if (0 != wait_for_any_event(NULL, 0, INFINITE))
-			return -1;
+	int drain_retries = 100;  /* ~100 ms cap */
+	while (drain_retries-- > 0 && pio->write_details.pending)
+		SleepEx(1, TRUE);
 
 	CancelIo(WINHANDLE(pio));
-	/* let queued APCs (if any) drain */
-	SleepEx(0, TRUE);
+	/* Drain pending read AND write APCs with a bounded loop. SleepEx(0,TRUE)
+	 * only runs already-queued APCs; APCs posted by CancelIo can arrive
+	 * later and dereference the freed pio (use-after-free), symmetric to
+	 * the socketio_close fix.
+	 */
+	drain_retries = 10;
+	while (drain_retries-- > 0 &&
+	       (pio->read_details.pending || pio->write_details.pending))
+		SleepEx(1, TRUE);
 	CloseHandle(WINHANDLE(pio));
 	if (pio->read_details.buf)
 		free(pio->read_details.buf);
