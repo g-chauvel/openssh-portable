@@ -40,7 +40,7 @@ register_child(HANDLE child, DWORD pid)
 {
 	DWORD first_zombie_index;
 
-	debug4("Register child %p pid %d, %d zombies of %d", child, pid,
+	debug3("Register child %p pid %d, %d zombies of %d", child, pid,
 		children.num_zombies, children.num_children);
 	if (children.num_children == MAX_CHILDREN) {
 		errno = ENOMEM;
@@ -67,7 +67,7 @@ int
 sw_remove_child_at_index(DWORD index)
 {
 	DWORD last_non_zombie;
-	debug4("Unregister child at index %d, %d zombies of %d", index,
+	debug3("Unregister child at index %d, %d zombies of %d", index,
 		children.num_zombies, children.num_children);
 
 	if ((index >= children.num_children) || (children.num_children == 0)) {
@@ -105,7 +105,8 @@ sw_child_to_zombie(DWORD index)
 	DWORD last_non_zombie, zombie_pid;
 	HANDLE zombie_handle;
 
-	debug4("zombie'ing child at index %d, %d zombies of %d", index,
+	debug3("zombie'ing child at index %d pid=%lu, %d zombies of %d", index,
+		(unsigned long)children.process_id[index],
 		children.num_zombies, children.num_children);
 
 	if (index >= children.num_children) {

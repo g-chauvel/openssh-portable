@@ -306,11 +306,14 @@ collect_children(struct ssh *ssh)
 	int status;
 
 	if (child_terminated) {
-		debug("Received SIGCHLD.");
+		debug3("collect_children: child_terminated=1, entering waitpid loop");
 		while ((pid = waitpid(-1, &status, WNOHANG)) > 0 ||
 		    (pid == -1 && errno == EINTR))
-			if (pid > 0)
+			if (pid > 0) {
+				debug3("collect_children: waitpid reaped pid=%ld status=%d", (long)pid, status);
 				session_close_by_pid(ssh, pid, status);
+			}
+		debug3("collect_children: loop exit, last pid=%ld errno=%d", (long)pid, errno);
 		child_terminated = 0;
 	}
 }

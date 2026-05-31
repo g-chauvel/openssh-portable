@@ -289,9 +289,14 @@ wait_for_any_event(HANDLE* events, int num_events, DWORD milli_seconds)
 		/* woken up by event signaled
 		 * is this due to a child process going down
 		 */
-		if (live_children && ((ret - WAIT_OBJECT_0_ENHANCED) < live_children)) {
+		DWORD signaled_idx = ret - WAIT_OBJECT_0_ENHANCED;
+		debug3("wait_for_any_event: signaled idx=%lu live_children=%lu num_events=%lu",
+			signaled_idx, live_children, num_events);
+		if (live_children && (signaled_idx < live_children)) {
 			sigaddset(&pending_signals, W32_SIGCHLD);
-			sw_child_to_zombie(ret - WAIT_OBJECT_0_ENHANCED);
+			sw_child_to_zombie(signaled_idx);
+		} else {
+			debug3("wait_for_any_event: non-child event (idx>=live_children)");
 		}
 	} else if (ret == WAIT_IO_COMPLETION_ENHANCED) {
 		/* APC processed due to IO or signal*/
