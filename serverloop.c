@@ -820,9 +820,21 @@ server_input_global_request(int type, u_int32_t seq, struct ssh *ssh)
 		if ((r = sshpkt_start(ssh, success ?
 		    SSH2_MSG_REQUEST_SUCCESS : SSH2_MSG_REQUEST_FAILURE)) != 0 ||
 		    (success && resp != NULL && (r = sshpkt_putb(ssh, resp)) != 0) ||
-		    (r = sshpkt_send(ssh)) != 0 ||
-		    (r = ssh_packet_write_wait(ssh)) != 0)
+		    (r = sshpkt_send(ssh)) != 0)
 			sshpkt_fatal(ssh, r, "%s: send reply", __func__);
+		/*
+		 * Previously this handler called ssh_packet_write_wait() here
+		 * to flush the reply synchronously. On Win32 that wait entered
+		 * an alertable state (w32_select / wait_for_any_event with
+		 * MWMO_ALERTABLE), allowing WSARecv/WSASend completion APCs on
+		 * the same duplex TCP socket to run re-entrantly and mutate
+		 * read_details/write_details while another packet (e.g.
+		 * SSH_MSG_CHANNEL_REQUEST exit-status) was being queued into
+		 * state->output, leading to lost exit-status and spurious
+		 * RST/ECONNABORTED under client keepalive tight-loop load. The
+		 * reply is left for the main loop's process_output() to flush,
+		 * matching all other dispatch handlers.
+		 */
 	}
 	free(fwd.listen_host);
 	free(fwd.listen_path);
