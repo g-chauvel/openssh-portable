@@ -630,10 +630,24 @@ socketio_shutdown(struct w32_io* pio, int how)
 int
 socketio_close(struct w32_io* pio)
 {
+	int drain_retries = 10;
+
 	debug4("close - io:%p", pio);
 	closesocket(pio->sock);
-	/* wait for pending io to abort */
-	SleepEx(0, TRUE);
+	/*
+	 * Wait for pending IO to abort. A single alertable SleepEx(0) is not
+	 * always sufficient to drain all queued WSARecv/WSASend completion
+	 * APCs on a duplex socket (connection_in == connection_out): if any
+	 * APC fires after free(pio) below it dereferences a freed w32_io and
+	 * may corrupt the parent sshd's fd_table (handles inherited via
+	 * WSADuplicateSocketW in the post-9.8 split sshd/sshd-session
+	 * architecture). Loop a bounded number of short alertable waits so
+	 * completion routines drain.
+	 */
+	while (drain_retries-- > 0 &&
+	    (pio->read_details.pending || pio->write_details.pending)) {
+		SleepEx(1, TRUE);
+	}
 	if ((pio->internal.state == SOCK_READY) &&
 	    (pio->read_details.pending || pio->write_details.pending)) {
 		error("close - IO is still pending on closed socket. read:%d, write:%d, io:%p",
