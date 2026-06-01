@@ -1878,15 +1878,13 @@ static Session *
 session_by_pid(pid_t pid)
 {
 	int i;
-	debug3("session_by_pid: looking up pid %ld", (long)pid);
+	debug("session_by_pid: pid %ld", (long)pid);
 	for (i = 0; i < sessions_nalloc; i++) {
 		Session *s = &sessions[i];
-		if (s->used && s->pid == pid) {
-			debug3("session_by_pid: MATCH session[%d] chanid=%d", i, s->chanid);
+		if (s->used && s->pid == pid)
 			return s;
-		}
 	}
-	error("session_by_pid: NO MATCH for pid %ld (likely 2nd-channel reap bug)", (long)pid);
+	error("session_by_pid: unknown pid %ld", (long)pid);
 	session_dump();
 	return NULL;
 }
