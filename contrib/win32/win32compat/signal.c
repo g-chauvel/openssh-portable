@@ -285,7 +285,16 @@ wait_for_any_event(HANDLE* events, int num_events, DWORD milli_seconds)
 	}
 
 	DWORD ret = wait_for_multiple_objects_enhanced(num_all_events, all_events, milli_seconds, TRUE);
-	if ((ret >= WAIT_OBJECT_0_ENHANCED) && (ret <= WAIT_OBJECT_0_ENHANCED + num_all_events - 1)) {
+	/* num_all_events > 0 guard: avoids DWORD underflow of (num_all_events - 1)
+	 * when 0 events are passed. Without it, the upper bound wraps to 0xFFFFFFFF
+	 * and ANY ret value (including WAIT_IO_COMPLETION_ENHANCED 0x30000000 and
+	 * WAIT_TIMEOUT_ENHANCED 0x20000000) matches this branch instead of falling
+	 * through to its proper handler. Observed symptom: busy loop with
+	 * "wait_for_any_event: signaled idx=805306368" repeating, because nCount=0
+	 * causes wait_for_multiple_objects_enhanced() to do SleepEx(0,TRUE) and
+	 * return WAIT_IO_COMPLETION_ENHANCED on every APC. */
+	if (num_all_events > 0 &&
+	    (ret >= WAIT_OBJECT_0_ENHANCED) && (ret <= WAIT_OBJECT_0_ENHANCED + num_all_events - 1)) {
 		/* woken up by event signaled
 		 * is this due to a child process going down
 		 */
