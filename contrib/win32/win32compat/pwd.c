@@ -35,6 +35,8 @@
 
 #include <Windows.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 #include <LM.h>
 #include <sddl.h>
 #include <DsGetDC.h>
@@ -124,6 +126,174 @@ free_tokenized_default_shell_command_option(char** argv)
 	free(argv);
 }
 
+/*
+ * Shell configuration from a dedicated file, used in place of the registry.
+ *
+ * This is deliberately a SEPARATE file, NOT sshd_config: parsing sshd_config
+ * keywords would require touching the base OpenSSH layer (servconf.c), whereas
+ * everything here stays inside the Windows adaptation layer (contrib\win32).
+ *
+ * File location (first match wins):
+ *   1. %SSHD_SHELL_CONFIG%                  explicit path - ideal for user-level
+ *                                           foreground testing (no admin needed)
+ *   2. <dir of the running binary>\shell_config
+ *
+ * Format: one "Keyword value" per line, '#' starts a comment, blank lines are
+ * ignored. Keywords reuse the registry names (case-insensitive):
+ *   DefaultShell                 C:\Windows\System32\cmd.exe
+ *   DefaultShellCommandOption    /c
+ *   DefaultShellArguments        -NoLogo -NoProfile
+ *   DefaultShellEscapeArguments  yes        (yes/no | true/false | 1/0)
+ *
+ * The value is the remainder of the line (so unquoted paths with spaces work);
+ * a single pair of surrounding double quotes, if present, is stripped.
+ *
+ * Returns 1 only if DefaultShell was found, in which case the file provides the
+ * shell config EXCLUSIVELY and the registry is not consulted. Returns 0 (with
+ * the output buffers left empty) if the file is absent, unreadable, or has no
+ * DefaultShell, so the caller falls back to the registry.
+ */
+static int
+read_shell_config_file(wchar_t *path_buf, size_t path_buf_cch,
+    wchar_t *option_buf, size_t option_buf_cch,
+    wchar_t *arg_buf, size_t arg_buf_cch,
+    BOOLEAN *escape, BOOLEAN *escape_set)
+{
+	wchar_t file_path[PATH_MAX];
+	DWORD env_len;
+	FILE *f = NULL;
+	char *content = NULL, *line, *ctx = NULL;
+	long file_size;
+	size_t read_len;
+	int found_shell = 0;
+
+	path_buf[0] = option_buf[0] = arg_buf[0] = L'\0';
+	*escape_set = FALSE;
+
+	/* resolve the file path: %SSHD_SHELL_CONFIG% override, else next to the
+	 * running binary. GetEnvironmentVariableW returns 0 if unset and the needed
+	 * length (>= buffer size) if it would not fit. */
+	env_len = GetEnvironmentVariableW(L"SSHD_SHELL_CONFIG", file_path,
+	    (DWORD)_countof(file_path));
+	if (env_len == 0 || env_len >= _countof(file_path)) {
+		if (__wprogdir == NULL ||
+		    _snwprintf_s(file_path, _countof(file_path), _TRUNCATE,
+		        L"%s\\shell_config", __wprogdir) < 0)
+			return 0;
+	}
+
+	if (_wfopen_s(&f, file_path, L"rb") != 0 || f == NULL)
+		return 0;	/* no file -> caller uses the registry */
+
+	{
+		char *fp_utf8 = utf16_to_utf8(file_path);
+		debug3("%s: reading shell config from %s", __func__,
+		    fp_utf8 != NULL ? fp_utf8 : "(?)");
+		if (fp_utf8 != NULL)
+			free(fp_utf8);
+	}
+
+	if (fseek(f, 0, SEEK_END) != 0 ||
+	    (file_size = ftell(f)) <= 0 || file_size > 1024 * 1024 ||
+	    fseek(f, 0, SEEK_SET) != 0)
+		goto done;
+
+	if ((content = malloc((size_t)file_size + 1)) == NULL)
+		goto done;
+	read_len = fread(content, 1, (size_t)file_size, f);
+	content[read_len] = '\0';
+
+	/* skip a UTF-8 BOM if present */
+	line = content;
+	if (read_len >= 3 && (unsigned char)content[0] == 0xEF &&
+	    (unsigned char)content[1] == 0xBB && (unsigned char)content[2] == 0xBF)
+		line += 3;
+
+	for (line = strtok_s(line, "\r\n", &ctx); line != NULL;
+	     line = strtok_s(NULL, "\r\n", &ctx)) {
+		char *key, *val, *end;
+		wchar_t *val_w, *dst = NULL;
+		size_t dst_cch = 0;
+
+		/* trim leading whitespace; skip blank lines and comments */
+		while (*line == ' ' || *line == '\t')
+			line++;
+		if (*line == '\0' || *line == '#')
+			continue;
+
+		/* split key / value on the first run of whitespace */
+		key = line;
+		while (*line != '\0' && *line != ' ' && *line != '\t')
+			line++;
+		if (*line != '\0') {
+			*line++ = '\0';
+			while (*line == ' ' || *line == '\t')
+				line++;
+		}
+		val = line;
+
+		/* trim trailing whitespace */
+		end = val + strlen(val);
+		while (end > val && (end[-1] == ' ' || end[-1] == '\t'))
+			*--end = '\0';
+
+		/* strip a single pair of surrounding double quotes */
+		if (end - val >= 2 && val[0] == '"' && end[-1] == '"') {
+			end[-1] = '\0';
+			val++;
+		}
+
+		if (_stricmp(key, "DefaultShellEscapeArguments") == 0) {
+			if (_stricmp(val, "yes") == 0 || _stricmp(val, "true") == 0 ||
+			    strcmp(val, "1") == 0) {
+				*escape = TRUE;
+				*escape_set = TRUE;
+			} else if (_stricmp(val, "no") == 0 || _stricmp(val, "false") == 0 ||
+			    strcmp(val, "0") == 0) {
+				*escape = FALSE;
+				*escape_set = TRUE;
+			} else
+				error("%s: invalid DefaultShellEscapeArguments value '%s'",
+				    __func__, val);
+			continue;
+		}
+
+		if (_stricmp(key, "DefaultShell") == 0) {
+			dst = path_buf;
+			dst_cch = path_buf_cch;
+		} else if (_stricmp(key, "DefaultShellCommandOption") == 0) {
+			dst = option_buf;
+			dst_cch = option_buf_cch;
+		} else if (_stricmp(key, "DefaultShellArguments") == 0) {
+			dst = arg_buf;
+			dst_cch = arg_buf_cch;
+		} else {
+			debug3("%s: ignoring unknown keyword '%s'", __func__, key);
+			continue;
+		}
+
+		if (*val == '\0')
+			continue;
+		if ((val_w = utf8_to_utf16(val)) == NULL)
+			goto done;
+		if (wcscpy_s(dst, dst_cch, val_w) == 0 && dst == path_buf)
+			found_shell = 1;
+		free(val_w);
+	}
+
+done:
+	if (f != NULL)
+		fclose(f);
+	if (content != NULL)
+		free(content);
+	if (!found_shell) {
+		/* leave nothing behind for the registry fallback path */
+		path_buf[0] = option_buf[0] = arg_buf[0] = L'\0';
+		*escape_set = FALSE;
+	}
+	return found_shell;
+}
+
 /* returns 0 on success, and -1 with errno set on failure */
 static int
 set_defaultshell()
@@ -135,6 +305,7 @@ set_defaultshell()
 	char *pw_shellpath_local = NULL, *command_option_local = NULL, *shell_arguments_local = NULL;
 	char **command_option_argv_local = NULL;
 	int command_option_argc_local = 0;
+	BOOLEAN file_escape = TRUE, file_escape_set = FALSE;
 
 	errno = 0;
 
@@ -147,7 +318,18 @@ set_defaultshell()
 	arg_buf[0] = L'\0';
 
 	tmp_len = _countof(path_buf);
-	if ((RegOpenKeyExW(HKEY_LOCAL_MACHINE, SSH_REGISTRY_ROOT, 0, mask, &reg_key) == ERROR_SUCCESS) &&
+	if (read_shell_config_file(path_buf, _countof(path_buf),
+	    option_buf, _countof(option_buf), arg_buf, _countof(arg_buf),
+	    &file_escape, &file_escape_set)) {
+		/*
+		 * Shell config came from the dedicated file (see
+		 * read_shell_config_file). By design the registry is NOT consulted
+		 * in this case; path_buf / option_buf / arg_buf are already
+		 * populated and flow through the common conversion tail below.
+		 */
+		if (file_escape_set)
+			arg_escape = (file_escape != 0) ? TRUE : FALSE;
+	} else if ((RegOpenKeyExW(HKEY_LOCAL_MACHINE, SSH_REGISTRY_ROOT, 0, mask, &reg_key) == ERROR_SUCCESS) &&
 	    (RegQueryValueExW(reg_key, L"DefaultShell", 0, NULL, (LPBYTE)path_buf, &tmp_len) == ERROR_SUCCESS) &&
 	    (path_buf[0] != L'\0')) {
 		/* fetched default shell path from registry */
