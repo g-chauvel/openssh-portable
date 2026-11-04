@@ -12,4 +12,13 @@
     <AdditionalDependentLibs>bcrypt.lib;Userenv.lib;Crypt32.lib;Ws2_32.lib;Secur32.lib;Shlwapi.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;comdlg32.lib;advapi32.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;odbc32.lib;odbccp32.lib;Netapi32.lib;Rpcrt4.lib;ntdll.lib</AdditionalDependentLibs>
     <MinimalCoreWin>false</MinimalCoreWin>
   </PropertyGroup>
+  <!-- The sources are UTF-8, most of them without BOM. Without /utf-8, cl.exe reads them in the ANSI
+       code page of the build machine, which breaks the build on non-1252 machines (code page 932:
+       C2001 in regress/unittests/win32compat/file_tests.c, C4819 in many files). /utf-8 sets the source
+       and execution character sets to UTF-8 for every project, since they all import this file. -->
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+    </ClCompile>
+  </ItemDefinitionGroup>
 </Project>
