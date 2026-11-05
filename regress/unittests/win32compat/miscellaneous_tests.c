@@ -398,7 +398,7 @@ test_build_commandline_string()
 	argv[0] = "C:\\my folder\\bash.exe";
 	argv[2] = "\"arg1\\arg2\"";
 	out = build_commandline_string(argv[0], argv + 1, TRUE);
-	sprintf_s(buf, PATH_MAX, "\"%s\" %s %s", argv[0], argv[1], "\\\"arg1\\arg2\\\"");
+	sprintf_s(buf, PATH_MAX, "\"%s\" %s %s", argv[0], argv[1], "\"\\\"arg1\\arg2\\\"\"");
 	ASSERT_STRING_EQ(out, buf);
 	free(out);
 	argv[2] = "\"arg1 arg2\\\"";
@@ -452,7 +452,7 @@ test_build_commandline_string()
 	argv[1] = "a\\\\\"b";
 	argv[2] = NULL;
 	out = build_commandline_string(argv[0], argv + 1, FALSE);
-	ASSERT_STRING_EQ(out, "\"shell.exe\" a\\\\\\\\\\\"b");
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"a\\\\\\\\\\\"b\"");
 	free(out);
 	TEST_DONE();
 
@@ -473,6 +473,16 @@ test_build_commandline_string()
 	argv[2] = NULL;
 	out = build_commandline_string(argv[0], argv + 1, FALSE);
 	ASSERT_STRING_EQ(out, "\"shell.exe\" \"line1\rline2\"");
+	free(out);
+	TEST_DONE();
+
+	/* The Cygwin and MSYS2 runtime reads a single quote as a quote */
+	TEST_START("argument containing a single quote");
+	argv[0] = "\"shell.exe\"";
+	argv[1] = "it's";
+	argv[2] = NULL;
+	out = build_commandline_string(argv[0], argv + 1, FALSE);
+	ASSERT_STRING_EQ(out, "\"shell.exe\" \"it's\"");
 	free(out);
 	TEST_DONE();
 }
@@ -563,6 +573,11 @@ test_build_commandline_string_roundtrip()
 	TEST_START("argument containing carriage return");
 	char *rt_cr[] = { "line1\rline2", NULL };
 	ASSERT_ARGV_ROUNDTRIP(rt_cr);
+	TEST_DONE();
+
+	TEST_START("argument containing a single quote");
+	char *rt_single_quote_no_space[] = { "it's", NULL };
+	ASSERT_ARGV_ROUNDTRIP(rt_single_quote_no_space);
 	TEST_DONE();
 }
 

@@ -1964,11 +1964,14 @@ build_commandline_string(const char* cmd, char *const argv[], BOOLEAN prepend_mo
 			/*
 			 * Quote empty arguments and arguments containing a separator:
 			 * space and tab for the UCRT, also LF and CR for the Cygwin and
-			 * MSYS2 runtime of bash.exe.
+			 * MSYS2 runtime of bash.exe. Also quote arguments containing a
+			 * quote: that runtime reads a single quote as a quote, and \"
+			 * like the UCRT only inside double quotes.
 			 */
 			for (int i = 0; i < (int)strlen(p1); i++) {
 				if (p1[i] == ' ' || p1[i] == '\t' ||
-				    p1[i] == '\n' || p1[i] == '\r') {
+				    p1[i] == '\n' || p1[i] == '\r' ||
+				    p1[i] == '\"' || p1[i] == '\'') {
 					add_quotes = TRUE;
 					break;
 				}
